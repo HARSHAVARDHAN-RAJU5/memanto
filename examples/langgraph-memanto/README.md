@@ -2,6 +2,12 @@
 
 This example demonstrates how to use **Memanto** as a long-term memory layer for **LangGraph** agents. It showcases a **Hybrid Memory Architecture** where LangGraph handles short-term conversation state and Memanto provides a persistent, cross-session brain.
 
+## 🎥 Demo
+
+![Cross-Session Recall Demo](demo/cross_session_recall_demo.gif)
+
+> **Session 1** stores research findings via `memanto_remember` → **Session 2** (fresh thread, empty LangGraph state) retrieves them via `memanto_recall`. The agent remembers across sessions!
+
 ## 🧠 Why Memanto for LangGraph?
 
 LangGraph's built-in persistence (Checkpointers) is excellent for maintaining state within a thread. However, agents often need to:
@@ -49,3 +55,4 @@ python main.py
 - `memanto_langgraph/tools.py`: Wraps Memanto SDK into LangChain tools with strict typing.
 - `graph.py`: Defines the LangGraph state machine with integrated checkpointer.
 - `main.py`: Orchestrates the multi-session demonstration.
+- `demo/`: Demo GIF and animation source files.

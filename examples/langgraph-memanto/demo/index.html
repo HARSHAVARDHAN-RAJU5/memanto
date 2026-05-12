@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memanto + LangGraph Demo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@600;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 24px 32px;
+    overflow: hidden;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 18px;
+    animation: fadeIn 0.8s ease;
+  }
+
+  .header h1 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 800;
+    font-size: 28px;
+    background: linear-gradient(135deg, #58a6ff, #bc8cff, #f778ba);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .header .subtitle {
+    font-size: 13px;
+    color: #8b949e;
+    margin-top: 4px;
+  }
+
+  .terminals {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    max-width: 1100px;
+    flex: 1;
+  }
+
+  .terminal {
+    flex: 1;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .terminal-bar {
+    background: #21262d;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #30363d;
+  }
+
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.red { background: #ff5f56; }
+  .dot.yellow { background: #ffbd2e; }
+  .dot.green { background: #27c93f; }
+
+  .terminal-title {
+    margin-left: 8px;
+    font-size: 12px;
+    color: #8b949e;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .terminal-body {
+    padding: 16px;
+    flex: 1;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .line { opacity: 0; transform: translateY(4px); }
+  .line.visible {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+
+  .prompt { color: #7ee787; font-weight: 700; }
+  .cmd { color: #79c0ff; }
+  .info { color: #8b949e; }
+  .highlight { color: #ffa657; }
+  .success { color: #3fb950; }
+  .memory { color: #d2a8ff; }
+  .recall { color: #58a6ff; }
+  .separator { color: #30363d; }
+  .agent { color: #f0883e; }
+  .tool-call { color: #bc8cff; }
+  .result { color: #7ee787; }
+  .human { color: #58a6ff; }
+  .ai { color: #f778ba; }
+
+  .badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .badge-session1 { background: #1f3d2a; color: #3fb950; border: 1px solid #3fb950; }
+  .badge-session2 { background: #1f2d3d; color: #58a6ff; border: 1px solid #58a6ff; }
+  .badge-tool { background: #2d1f3d; color: #bc8cff; border: 1px solid #bc8cff; }
+  .badge-memory { background: #3d2d1f; color: #ffa657; border: 1px solid #ffa657; }
+
+  .arrow {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    z-index: 10;
+  }
+
+  .arrow.visible {
+    opacity: 1;
+    animation: pulseArrow 1.5s ease infinite;
+  }
+
+  .arrow svg { width: 60px; height: 60px; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulseArrow { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.7; } 50% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; } }
+
+  .status-bar {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 13px;
+    color: #8b949e;
+    height: 24px;
+    animation: fadeIn 0.5s ease;
+  }
+  .status-bar .phase {
+    font-weight: 700;
+    color: #58a6ff;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧠 Memanto + LangGraph Demo</h1>
+  <div class="subtitle">Cross-Session Recall — Persistent Memory for AI Agents</div>
+</div>
+
+<div class="terminals">
+  <!-- Session 1 -->
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+      <span class="terminal-title">Session 1 — thread: session-1</span>
+    </div>
+    <div class="terminal-body" id="session1"></div>
+  </div>
+
+  <!-- Session 2 -->
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="dot red"></span>
+      <span class="dot yellow"></span>
+      <span class="dot green"></span>
+      <span class="terminal-title">Session 2 — thread: session-2 (NEW)</span>
+    </div>
+    <div class="terminal-body" id="session2"></div>
+  </div>
+</div>
+
+<div class="arrow" id="arrow">
+  <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="30" cy="30" r="28" stroke="#bc8cff" stroke-width="2" fill="#161b22"/>
+    <path d="M20 30H40M40 30L33 23M40 30L33 37" stroke="#bc8cff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</div>
+
+<div class="status-bar" id="status">
+  <span class="phase">▶ Starting demo...</span>
+</div>
+
+<script>
+const s1 = document.getElementById('session1');
+const s2 = document.getElementById('session2');
+const arrow = document.getElementById('arrow');
+const status = document.getElementById('status');
+
+function addLine(container, html, cls = '') {
+  const div = document.createElement('div');
+  div.className = 'line ' + cls;
+  div.innerHTML = html;
+  container.appendChild(div);
+  // trigger reflow
+  void div.offsetWidth;
+  div.classList.add('visible');
+  container.scrollTop = container.scrollHeight;
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function demo() {
+  await wait(800);
+
+  // ============ SESSION 1 ============
+  status.innerHTML = '<span class="phase">📝 Session 1 — Agent stores memories in Memanto</span>';
+
+  addLine(s1, '<span class="prompt">$</span> <span class="cmd">python main.py</span>');
+  await wait(600);
+
+  addLine(s1, '<span class="separator">─── Session for user-123 (Thread: session-1) ───</span>');
+  await wait(400);
+
+  addLine(s1, '<span class="human">👤 Human:</span> Research the top 3 benefits of using Memanto for AI agents. Store each as a fact.');
+  await wait(800);
+
+  addLine(s1, '<span class="ai">🤖 AI:</span> I\'ll research and store the top 3 benefits. Let me save them now...');
+  await wait(600);
+
+  // Tool calls
+  addLine(s1, '<span class="badge badge-tool">TOOL</span> <span class="tool-call">memanto_remember</span>(<span class="highlight">type</span>=fact, <span class="highlight">title</span>=Cross-Session Persistence)');
+  await wait(400);
+  addLine(s1, '  <span class="result">✓ Memory stored: mem_a1b2c3</span>');
+  await wait(500);
+
+  addLine(s1, '<span class="badge badge-tool">TOOL</span> <span class="tool-call">memanto_remember</span>(<span class="highlight">type</span>=fact, <span class="highlight">title</span>=Semantic Search & RAG)');
+  await wait(400);
+  addLine(s1, '  <span class="result">✓ Memory stored: mem_d4e5f6</span>');
+  await wait(500);
+
+  addLine(s1, '<span class="badge badge-tool">TOOL</span> <span class="tool-call">memanto_remember</span>(<span class="highlight">type</span>=fact, <span class="highlight">title</span>=Multi-Agent Knowledge Sharing)');
+  await wait(400);
+  addLine(s1, '  <span class="result">✓ Memory stored: mem_g7h8i9</span>');
+  await wait(500);
+
+  addLine(s1, '<span class="ai">🤖 AI:</span> Done! I\'ve stored 3 benefits in long-term memory:');
+  await wait(300);
+  addLine(s1, '  <span class="memory">1. Cross-Session Persistence</span> — memories survive thread restarts');
+  await wait(200);
+  addLine(s1, '  <span class="memory">2. Semantic Search & RAG</span> — find relevant memories via meaning');
+  await wait(200);
+  addLine(s1, '  <span class="memory">3. Multi-Agent Knowledge Sharing</span> — agents share a brain');
+  await wait(600);
+
+  addLine(s1, '<span class="success">✅ Session 1 complete — 3 memories persisted to Memanto</span>');
+  await wait(800);
+
+  // ============ TRANSITION ============
+  status.innerHTML = '<span class="phase">🔄 Switching to Session 2 — Fresh thread, no shared state...</span>';
+  arrow.classList.add('visible');
+  await wait(1800);
+  arrow.classList.remove('visible');
+
+  // ============ SESSION 2 ============
+  status.innerHTML = '<span class="phase">🔍 Session 2 — Agent recalls from Memanto (different thread!)</span>';
+
+  addLine(s2, '<span class="separator">─── Session for user-123 (Thread: session-2) ───</span>');
+  await wait(400);
+
+  addLine(s2, '<span class="info">⚠ New thread — LangGraph state is empty</span>');
+  await wait(600);
+
+  addLine(s2, '<span class="human">👤 Human:</span> What were those 3 benefits of Memanto you found earlier?');
+  await wait(800);
+
+  addLine(s2, '<span class="ai">🤖 AI:</span> Let me check my long-term memory...');
+  await wait(600);
+
+  addLine(s2, '<span class="badge badge-tool">TOOL</span> <span class="tool-call">memanto_recall</span>(<span class="highlight">query</span>="benefits of Memanto")');
+  await wait(700);
+
+  addLine(s2, '  <span class="recall">Found 3 memories:</span>');
+  await wait(300);
+  addLine(s2, '  <span class="memory">1. [fact] Cross-Session Persistence:</span> Memanto allows agents to');
+  addLine(s2, '     retain knowledge across completely separate threads and sessions.');
+  await wait(300);
+  addLine(s2, '  <span class="memory">2. [fact] Semantic Search & RAG:</span> Agents can find relevant');
+  addLine(s2, '     memories using natural language queries, not just exact matches.');
+  await wait(300);
+  addLine(s2, '  <span class="memory">3. [fact] Multi-Agent Knowledge Sharing:</span> Multiple agents can');
+  addLine(s2, '     share the same memory namespace for collaborative workflows.');
+  await wait(600);
+
+  addLine(s2, '<span class="ai">🤖 AI:</span> Here are the 3 benefits I stored from our earlier session:');
+  await wait(300);
+  addLine(s2, '  <span class="result">1. Cross-Session Persistence</span>');
+  addLine(s2, '  <span class="result">2. Semantic Search & RAG</span>');
+  addLine(s2, '  <span class="result">3. Multi-Agent Knowledge Sharing</span>');
+  await wait(500);
+  addLine(s2, '  Even though this is a brand-new thread, Memanto preserved the knowledge!');
+  await wait(600);
+
+  addLine(s2, '<span class="success">✅ Cross-Session Recall confirmed — Memanto works!</span>');
+  await wait(500);
+
+  status.innerHTML = '<span class="phase" style="color:#3fb950;">✅ Demo complete — Cross-session memory works across threads!</span>';
+}
+
+demo();
+</script>
+</body>
+</html>
