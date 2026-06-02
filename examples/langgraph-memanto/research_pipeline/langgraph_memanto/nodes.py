@@ -14,11 +14,13 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from dotenv import load_dotenv
 
-from langgraph_memanto.memory_tools import (
-    memanto_remember as _memanto_remember,
-    memanto_recall,
-    memanto_answer,
-)
+from core.memanto_tools import create_memanto_tools
+from memanto.cli.client.sdk_client import SdkClient
+client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
+tools = create_memanto_tools(client, "research_agent")
+_memanto_remember = next(t for t in tools if t.name == "memanto_remember")
+memanto_recall = next(t for t in tools if t.name == "memanto_recall")
+memanto_answer = next(t for t in tools if t.name == "memanto_answer")
 
 load_dotenv()
 

@@ -47,7 +47,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
-from memanto_tools import MEMANTO_TOOLS, memanto_recall
+from core.memanto_tools import create_memanto_tools
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -119,7 +119,10 @@ def create_llm():
         temperature=0,
         api_key=os.environ.get("OPENAI_API_KEY"),
     )
-    return llm.bind_tools(MEMANTO_TOOLS)
+    from memanto.cli.client.sdk_client import SdkClient
+    client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
+    tools = create_memanto_tools(client, AGENT_NAME)
+    return llm.bind_tools(tools)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -140,6 +143,10 @@ def recall_memories(state: AgentState) -> AgentState:
 
     # Construct a search query from the user's message
     query = f"What do I know about the user based on: {last_message[:200]}"
+    from memanto.cli.client.sdk_client import SdkClient
+    client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
+    tools = create_memanto_tools(client, AGENT_NAME)
+    memanto_recall = next(t for t in tools if t.name == "memanto_recall")
     result = memanto_recall.invoke({"query": query, "limit": 5})
 
     state["memory_context"] = result
@@ -190,7 +197,11 @@ def tool_node(state: AgentState) -> AgentState:
 
         logger.info(f"\n🔧 Calling Memanto tool: {tool_name}({arguments})")
 
-        for tool in MEMANTO_TOOLS:
+        from memanto.cli.client.sdk_client import SdkClient
+        client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
+        tools = create_memanto_tools(client, AGENT_NAME)
+
+        for tool in tools:
             if tool.name == tool_name:
                 result = tool.invoke(arguments)
                 logger.info(f"   Result: {str(result)[:200]}")

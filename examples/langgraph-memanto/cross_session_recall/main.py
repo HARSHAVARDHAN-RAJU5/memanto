@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from graph import create_research_graph
 from langchain_core.messages import HumanMessage
-from memanto_langgraph.tools import MemantoManager, create_memanto_tools
+from core.memanto_tools import MemantoManager, create_memanto_tools
 
 
 def run_session(agent_id, user_id, task, thread_id):

@@ -5,7 +5,7 @@ import time
 from memanto.cli.client.sdk_client import SdkClient
 from langchain_core.messages import HumanMessage
 from agent import build_graph
-from memanto_langchain_tools import create_memanto_tools
+from core.memanto_tools import create_memanto_tools
 from dotenv import load_dotenv
 
 def main():

@@ -15,7 +15,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from langgraph_memanto.memory_tools import memanto_recall, memanto_answer
+from core.memanto_tools import create_memanto_tools
+from memanto.cli.client.sdk_client import SdkClient
+import os
+client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
+tools = create_memanto_tools(client, "research_agent")
+memanto_recall = next(t for t in tools if t.name == "memanto_recall")
+memanto_answer = next(t for t in tools if t.name == "memanto_answer")
 
 load_dotenv()
 

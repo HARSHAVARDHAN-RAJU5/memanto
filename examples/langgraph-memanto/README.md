@@ -12,6 +12,17 @@ cp .env.example .env
 # Edit .env with your Memanto and OpenAI API keys
 `
 
+## Running the Examples
+
+Because the examples share the core tools module, you should run them as Python modules from this root directory:
+
+`ash
+python -m basic_integration.demo
+python -m cross_session_recall.main
+python -m custom_memory_saver.run_demo
+python -m research_pipeline.run_full_pipeline
+`
+
 ## Available Examples
 
 * **asic_integration/**: A minimal, drop-in example of using Memanto tools within a simple LangGraph agent.
