@@ -118,6 +118,7 @@ def create_llm():
         model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
         temperature=0,
         api_key=os.environ.get("OPENAI_API_KEY"),
+        base_url=os.environ.get("OPENAI_API_BASE") or None
     )
     from memanto.cli.client.sdk_client import SdkClient
     client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))

@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from graph import create_research_graph
+from .graph import create_research_graph
 from langchain_core.messages import HumanMessage
 from core.memanto_tools import MemantoManager, create_memanto_tools
 

@@ -15,7 +15,12 @@ class State(TypedDict):
 
 
 def create_research_graph(model_name: str, tools: list):
-    llm = ChatOpenAI(model=model_name)
+    import os
+    llm = ChatOpenAI(
+        model=os.environ.get("LLM_MODEL", model_name),
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        base_url=os.environ.get("OPENAI_API_BASE") or None
+    )
     llm_with_tools = llm.bind_tools(tools)
 
     def chatbot(state: State):

@@ -14,7 +14,13 @@ def build_graph(tools: List[callable]):
     Builds the LangGraph state graph for the agent.
     """
     # Using a fast and capable model
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+    import os
+    llm = ChatOpenAI(
+        model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
+        temperature=0,
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        base_url=os.environ.get("OPENAI_API_BASE") or None
+    )
     llm_with_tools = llm.bind_tools(tools)
     
     def chatbot(state: State):

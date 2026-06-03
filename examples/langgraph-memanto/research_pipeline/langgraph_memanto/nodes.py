@@ -42,15 +42,11 @@ def _get_memanto_api_key() -> str:
 # ---------------------------------------------------------------------------
 
 def _get_llm():
-    """Build an OpenRouter-backed chat model."""
-    if not OPENROUTER_API_KEY:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY not set. Copy .env.example to .env and fill it in."
-        )
+    """Build a flexible ChatOpenAI model."""
     return ChatOpenAI(
-        api_key=OPENROUTER_API_KEY,
-        base_url="https://openrouter.ai/api/v1",
-        model="anthropic/claude-3.5-haiku",
+        model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+        api_key=os.getenv("OPENAI_API_KEY") or OPENROUTER_API_KEY,
+        base_url=os.getenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1" if OPENROUTER_API_KEY else None) or None,
         temperature=0.7,
     )
 
