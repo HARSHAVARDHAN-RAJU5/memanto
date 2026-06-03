@@ -120,7 +120,13 @@ class MemantoMemory:
         )
         # Convert to expected format
         return [
-            {"id": m.get("memory_id"), "text": m.get("content")}
+            {
+                "id": m.get("memory_id"),
+                "text": m.get("content"),
+                "type": m.get("type", "unknown"),
+                "confidence": m.get("confidence", "N/A"),
+                "created_at": m.get("created_at", ""),
+            }
             for m in res.get("memories", [])
         ]
 

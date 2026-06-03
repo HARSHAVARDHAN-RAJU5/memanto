@@ -106,7 +106,7 @@ def validate_files() -> None:
         ROOT / "run_full_pipeline.py",
         PACKAGE / "__init__.py",
         PACKAGE / "state.py",
-        PACKAGE / "memory_tools.py",
+        ROOT.parent / "core" / "memanto_tools.py",
         PACKAGE / "nodes.py",
         PACKAGE / "graph.py",
     ]
@@ -120,7 +120,7 @@ def validate_syntax() -> None:
         ROOT / "run_writer.py",
         ROOT / "run_full_pipeline.py",
         PACKAGE / "state.py",
-        PACKAGE / "memory_tools.py",
+        ROOT.parent / "core" / "memanto_tools.py",
         PACKAGE / "nodes.py",
         PACKAGE / "graph.py",
     ]:
@@ -128,7 +128,7 @@ def validate_syntax() -> None:
 
 
 def validate_memanto_tools() -> None:
-    tree = _parse(PACKAGE / "memory_tools.py")
+    tree = _parse(ROOT.parent / "core" / "memanto_tools.py")
     functions = _function_names(tree)
     calls = _called_attribute_names(tree)
 

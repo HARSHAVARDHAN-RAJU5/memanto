@@ -18,7 +18,7 @@ def create_research_graph(model_name: str, tools: list):
     import os
 
     llm = ChatOpenAI(
-        model=os.environ.get("LLM_MODEL", "openai/gpt-4o-mini"),
+        model=model_name or os.environ.get("LLM_MODEL", "openai/gpt-4o-mini"),
         api_key=os.environ.get("OPENROUTER_API_KEY")
         or os.environ.get("OPENAI_API_KEY"),
         base_url=os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1"),

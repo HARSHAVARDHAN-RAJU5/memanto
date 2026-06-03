@@ -46,6 +46,10 @@ def main():
         "Be specific and concise."
     )
 
+    # Note: Each run_session call creates a completely fresh in-memory MemorySaver
+    # using a distinct thread_id. LangGraph's checkpointer carries nothing between
+    # the two sessions. The cross-session recall demonstrated here works because
+    # the Memanto tools query a shared global store based on the agent_id.
     run_session(agent_id, user_id, task1, thread_id="session-1")
 
     task2 = (

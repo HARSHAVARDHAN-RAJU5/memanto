@@ -44,10 +44,12 @@ import os
 from typing import Literal
 
 from core.memanto_tools import create_memanto_tools
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
+
+from memanto.cli.client.sdk_client import SdkClient
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -112,6 +114,18 @@ class AgentState(MessagesState):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+_client = None
+_tools = None
+
+
+def get_memanto_client_and_tools():
+    global _client, _tools
+    if _client is None:
+        _client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
+        _tools = create_memanto_tools(_client, AGENT_NAME)
+    return _client, _tools
+
+
 def create_llm():
     """Create the LLM with Memanto tools bound."""
     llm = ChatOpenAI(
@@ -121,10 +135,7 @@ def create_llm():
         or os.environ.get("OPENAI_API_KEY"),
         base_url=os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1"),
     )
-    from memanto.cli.client.sdk_client import SdkClient
-
-    client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
-    tools = create_memanto_tools(client, AGENT_NAME)
+    _, tools = get_memanto_client_and_tools()
     return llm.bind_tools(tools)
 
 
@@ -146,10 +157,7 @@ def recall_memories(state: AgentState) -> AgentState:
 
     # Construct a search query from the user's message
     query = f"What do I know about the user based on: {last_message[:200]}"
-    from memanto.cli.client.sdk_client import SdkClient
-
-    client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
-    tools = create_memanto_tools(client, AGENT_NAME)
+    _, tools = get_memanto_client_and_tools()
     memanto_recall = next(t for t in tools if t.name == "memanto_recall")
     result = memanto_recall.invoke({"query": query, "limit": 5})
 
@@ -195,25 +203,26 @@ def tool_node(state: AgentState) -> AgentState:
     last_message = state["messages"][-1]
     tool_calls = (last_message.additional_kwargs or {}).get("tool_calls", [])
 
+    new_messages = []
+    _, tools = get_memanto_client_and_tools()
+
     for tc in tool_calls:
         tool_name = tc["function"]["name"]
         arguments = json.loads(tc["function"]["arguments"])
+        tool_call_id = tc["id"]
 
         logger.info(f"\n🔧 Calling Memanto tool: {tool_name}({arguments})")
-
-        from memanto.cli.client.sdk_client import SdkClient
-
-        client = SdkClient(api_key=os.environ.get("MOORCHEH_API_KEY", ""))
-        tools = create_memanto_tools(client, AGENT_NAME)
 
         for tool in tools:
             if tool.name == tool_name:
                 result = tool.invoke(arguments)
                 logger.info(f"   Result: {str(result)[:200]}")
-                state["messages"].append(AIMessage(content=str(result)))
+                new_messages.append(
+                    ToolMessage(content=str(result), tool_call_id=tool_call_id)
+                )
                 break
 
-    return state
+    return {"messages": new_messages}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

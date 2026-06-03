@@ -240,7 +240,8 @@ def agent_node(state: AgentState, llm, memory: MemantoMemory) -> dict:
     messages_for_llm = [{"role": "system", "content": system_prompt}]
     for msg in state["messages"]:
         if hasattr(msg, "type") and msg.type == "system":
-            # Skip system messages from memory (they're injected context)
+            # Forward injected recall context to the model
+            messages_for_llm.append({"role": "system", "content": str(msg.content)})
             continue
         role = "user" if getattr(msg, "type", "") == "human" else "assistant"
         messages_for_llm.append({"role": role, "content": str(msg.content)})
