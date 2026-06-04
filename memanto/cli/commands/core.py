@@ -684,13 +684,21 @@ def serve(
     )
 
     # Check if configured
-    api_key = config_manager.get_api_key()
-    if not api_key:
-        console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
-        console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
-        console.print("The server will start but won't be able to use Moorcheh.")
+    backend = config_manager.get_backend()
+    if backend == Backend.ON_PREM:
+        op = config_manager.get_onprem_config()
+        console.print(
+            f"\n[dim]Backend: on-prem at {op.get('url', 'http://localhost:8080')}[/dim]"
+        )
+        os.environ["MEMANTO_BACKEND"] = "on-prem"
     else:
-        os.environ["MOORCHEH_API_KEY"] = api_key
+        api_key = config_manager.get_api_key()
+        if not api_key:
+            console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
+            console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
+            console.print("The server will start but won't be able to use Moorcheh.")
+        else:
+            os.environ["MOORCHEH_API_KEY"] = api_key
 
     # Import uvicorn here to avoid loading FastAPI for CLI commands
     try:
@@ -759,12 +767,15 @@ def ui(
     port = port or server_cfg.get("port", 8000)
 
     # Check if configured
-    api_key = config_manager.get_api_key()
-    if not api_key:
-        console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
-        console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
+    if config_manager.get_backend() == Backend.ON_PREM:
+        os.environ["MEMANTO_BACKEND"] = "on-prem"
     else:
-        os.environ["MOORCHEH_API_KEY"] = api_key
+        api_key = config_manager.get_api_key()
+        if not api_key:
+            console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
+            console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
+        else:
+            os.environ["MOORCHEH_API_KEY"] = api_key
 
     try:
         import uvicorn

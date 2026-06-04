@@ -41,20 +41,22 @@ def config_show():
         table.add_row("Embedding", op.get("embedding_provider") or "—")
     table.add_row("Config Dir", str(config_manager.config_dir))
     table.add_row("Server URL", f"{server_cfg['url']}:{server_cfg['port']}")
-    table.add_row("API Key", "***configured***" if api_key else "not set")
+    if backend == Backend.CLOUD:
+        table.add_row("API Key", "***configured***" if api_key else "not set")
     table.add_row("Active Agent", active_agent_id or "none")
     table.add_row("Session Active", "yes" if active_session_token else "no")
     table.add_row("Schedule Time", schedule_time)
     table.add_row("Interactive Mode", str(cli_cfg.get("interactive_mode", True)))
     table.add_row("Smart Parse", str(cli_cfg.get("smart_parse", True)))
 
-    # Answer Config
-    table.add_section()
-    table.add_row("[bold]Answer Config[/bold]", "")
-    table.add_row("  Model", ans_cfg.get("model", "—"))
-    table.add_row("  Temperature", str(ans_cfg.get("temperature", 0.7)))
-    table.add_row("  Limit", str(ans_cfg.get("answer_limit", 5)))
-    table.add_row("  Threshold", str(ans_cfg.get("threshold", 0.25)))
+    # Answer Config (cloud only — on-prem server does not expose RAG)
+    if backend == Backend.CLOUD:
+        table.add_section()
+        table.add_row("[bold]Answer Config[/bold]", "")
+        table.add_row("  Model", ans_cfg.get("model", "—"))
+        table.add_row("  Temperature", str(ans_cfg.get("temperature", 0.7)))
+        table.add_row("  Limit", str(ans_cfg.get("answer_limit", 5)))
+        table.add_row("  Threshold", str(ans_cfg.get("threshold", 0.25)))
 
     # Recall Config
     table.add_section()

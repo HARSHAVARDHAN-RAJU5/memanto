@@ -327,6 +327,21 @@ async def upload_file(
             )
         )
 
+    # upload_file relies on Moorcheh's server-side file chunking, which the
+    # on-prem image does not expose; refuse early instead of bubbling up the
+    # adapter's OnPremFeatureUnavailable as an opaque 500.
+    from memanto.app.clients.backend import Backend, parse_backend
+
+    if parse_backend(settings.MEMANTO_BACKEND) == Backend.ON_PREM:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "upload-file is not available on the on-prem backend "
+                "(no server-side file chunking). "
+                "Switch with: memanto config backend cloud"
+            ),
+        )
+
     # Validate file extension before reading
     ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".json", ".txt", ".csv", ".md"}
     original_name = file.filename or "upload"
