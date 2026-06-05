@@ -305,7 +305,6 @@ async def upload_file(
         ..., description="File to upload (.pdf, .docx, .xlsx, .json, .txt, .csv, .md)"
     ),
     session: Session = Depends(get_current_session),
-    client=Depends(get_moorcheh_client),
 ):
     """
     Upload a file directly to the agent's memory namespace (Session-based)
@@ -329,7 +328,9 @@ async def upload_file(
 
     # upload_file relies on Moorcheh's server-side file chunking, which the
     # on-prem image does not expose; refuse early instead of bubbling up the
-    # adapter's OnPremFeatureUnavailable as an opaque 500.
+    # adapter's OnPremFeatureUnavailable as an opaque 500. The client is
+    # acquired after this guard so a half-configured on-prem env (backend set
+    # but moorcheh-client not installed) still returns 501, not 500.
     from memanto.app.clients.backend import Backend, parse_backend
 
     if parse_backend(settings.MEMANTO_BACKEND) == Backend.ON_PREM:
@@ -341,6 +342,8 @@ async def upload_file(
                 "Switch with: memanto config backend cloud"
             ),
         )
+
+    client = get_moorcheh_client()
 
     # Validate file extension before reading
     ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".json", ".txt", ".csv", ".md"}
@@ -467,7 +470,6 @@ async def answer(
     agent_id: str,
     request: AnswerRequest = Body(...),
     session: Session = Depends(get_current_session),
-    client=Depends(get_moorcheh_client),
 ):
     """
     Answer a question using RAG (Session-based)
@@ -488,7 +490,9 @@ async def answer(
             )
         )
 
-    # answer.generate is a cloud-only feature; refuse early on on-prem.
+    # answer.generate is a cloud-only feature; refuse early on on-prem. The
+    # client is acquired after this guard so a half-configured on-prem env
+    # (backend set but moorcheh-client not installed) still returns 501, not 500.
     from memanto.app.clients.backend import Backend, parse_backend
 
     if parse_backend(settings.MEMANTO_BACKEND) == Backend.ON_PREM:
@@ -499,6 +503,8 @@ async def answer(
                 "Switch with: memanto config backend cloud"
             ),
         )
+
+    client = get_moorcheh_client()
 
     # Resolve defaults from settings
     limit = request.limit if request.limit is not None else settings.ANSWER_LIMIT

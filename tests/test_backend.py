@@ -94,9 +94,7 @@ class TestDataDirRouting:
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setattr(app_config.settings, "MEMANTO_BACKEND", "cloud")
         # Path.home() is cached via os.path.expanduser in some envs; force it
-        monkeypatch.setattr(
-            app_config.Path, "home", classmethod(lambda cls: tmp_path)
-        )
+        monkeypatch.setattr(app_config.Path, "home", classmethod(lambda cls: tmp_path))
         assert app_config.get_data_dir() == tmp_path / ".memanto"
 
     def test_on_prem_uses_subdir(self, tmp_path, monkeypatch):
@@ -104,9 +102,7 @@ class TestDataDirRouting:
 
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setattr(app_config.settings, "MEMANTO_BACKEND", "on-prem")
-        monkeypatch.setattr(
-            app_config.Path, "home", classmethod(lambda cls: tmp_path)
-        )
+        monkeypatch.setattr(app_config.Path, "home", classmethod(lambda cls: tmp_path))
         result = app_config.get_data_dir()
         assert result == tmp_path / ".memanto" / "on-prem"
         assert result.exists()

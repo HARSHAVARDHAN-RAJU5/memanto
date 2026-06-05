@@ -97,12 +97,13 @@ def get_client() -> SdkClient:
         # OnPremClient ignores it (it talks to localhost:8080).
         api_key = "on-prem"
     else:
-        api_key = config_manager.get_api_key()
-        if not api_key:
+        cfg_key = config_manager.get_api_key()
+        if not cfg_key:
             _error(
                 "MEMANTO not configured.",
                 hint="Run 'memanto' to set up your API key.",
             )
+        api_key = cfg_key
         # Ensure env is set for app services on the cloud path.
         os.environ["MOORCHEH_API_KEY"] = api_key
 

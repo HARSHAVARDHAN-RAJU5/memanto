@@ -12,6 +12,28 @@ def reset_auto_parse(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def force_cloud_backend(monkeypatch):
+    """Force ``settings.MEMANTO_BACKEND='cloud'`` and a placeholder API key so
+    the dispatcher never tries to instantiate ``OnPremClient`` during
+    cloud-focused tests, regardless of the developer's local
+    ``~/.memanto/config.yaml``. Tests that explicitly exercise the on-prem
+    branch (see ``tests/test_backend.py``) do their own per-test save/restore
+    and override this safely. Tests that explicitly verify the
+    ``MOORCHEH_API_KEY``-missing branch (e.g.
+    ``test_create_agent_fails_when_server_key_missing``) use
+    ``patch.object(settings, "MOORCHEH_API_KEY", "")`` which temporarily
+    overrides this fixture's value.
+    """
+    from memanto.app.clients.moorcheh import moorcheh_client
+    from memanto.app.config import settings
+
+    monkeypatch.setattr(settings, "MEMANTO_BACKEND", "cloud")
+    if not settings.MOORCHEH_API_KEY:
+        monkeypatch.setattr(settings, "MOORCHEH_API_KEY", "test-api-key")
+    moorcheh_client.reset_client()
+
+
+@pytest.fixture(autouse=True)
 def mock_moorcheh_for_tests():
     """Prevent tests from calling real Moorcheh APIs.
 

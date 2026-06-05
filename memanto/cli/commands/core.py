@@ -69,7 +69,7 @@ def _first_run_setup() -> None:
 
     backend_label = "Cloud" if backend == Backend.CLOUD else "On-Prem"
     extras = (
-        f"[dim]API Key:[/dim] [green]●[/green] configured"
+        "[dim]API Key:[/dim] [green]●[/green] configured"
         if backend == Backend.CLOUD
         else f"[dim]Server:[/dim] {config_manager.get_onprem_config()['url']}\n"
         f"[dim]Embedding:[/dim] {config_manager.get_onprem_config()['embedding_provider'] or 'unknown'}"
@@ -235,8 +235,7 @@ def _prompt_embedding_provider() -> tuple[str, str, str]:
 
     if str(choice).strip() == "2":
         console.print(
-            f"  [{BRIGHT}]a[/{BRIGHT}]  OpenAI   "
-            f"[{BRIGHT}]b[/{BRIGHT}]  Cohere"
+            f"  [{BRIGHT}]a[/{BRIGHT}]  OpenAI   [{BRIGHT}]b[/{BRIGHT}]  Cohere"
         )
         sub = typer.prompt("  Enter a or b", default="a")
         provider = "openai" if str(sub).strip().lower() != "b" else "cohere"
@@ -288,13 +287,10 @@ def _pull_ollama_model_in_container(model: str) -> None:
         )
 
     console.print(
-        f"[dim]  Pulling {model} inside Ollama container "
-        f"{container_id[:12]}...[/dim]"
+        f"[dim]  Pulling {model} inside Ollama container {container_id[:12]}...[/dim]"
     )
     try:
-        subprocess.check_call(
-            ["docker", "exec", container_id, "ollama", "pull", model]
-        )
+        subprocess.check_call(["docker", "exec", container_id, "ollama", "pull", model])
     except subprocess.CalledProcessError as e:
         _error(f"Failed to pull embedding model inside container: {e}")
     console.print("[green]  ✓ Embedding model ready in container[/green]")
