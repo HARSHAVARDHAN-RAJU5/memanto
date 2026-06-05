@@ -44,6 +44,8 @@ async def get_ui_config():
     recall_cfg = _config_manager.get_recall_config()
     schedule_time = _config_manager.get_schedule_time()
     active_agent_id, active_session_token = _config_manager.get_active_session()
+    backend = _config_manager.get_backend().value
+    onprem_cfg = _config_manager.get_onprem_config()
 
     return {
         "api_key_configured": bool(api_key),
@@ -51,6 +53,12 @@ async def get_ui_config():
         if api_key and len(api_key) > 6
         else ("***" if api_key else None),
         "api_key": api_key,
+        "backend": backend,
+        "on_prem": {
+            "url": onprem_cfg.get("url", "http://localhost:8080"),
+            "embedding_provider": onprem_cfg.get("embedding_provider", ""),
+        },
+        "data_dir": str(_config_manager.get_data_dir()),
         "server": {
             "url": server_cfg.get("url", "localhost"),
             "port": server_cfg.get("port", 8000),

@@ -98,12 +98,17 @@ class SdkClient:
     # Lazy initializers
 
     def _get_moorcheh(self):
-        """Return (or create) the ``moorcheh_sdk.MoorchehClient`` singleton."""
-        if self._moorcheh is None:
-            from moorcheh_sdk import MoorchehClient
+        """Return (or create) the backend-aware Moorcheh client.
 
-            logger.debug("Initializing moorcheh_sdk.MoorchehClient")
-            self._moorcheh = MoorchehClient(api_key=self.api_key)
+        Dispatches to cloud ``MoorchehClient`` or on-prem ``OnPremClient`` based
+        on the active backend - service code sees the same cloud-shaped surface
+        either way.
+        """
+        if self._moorcheh is None:
+            from memanto.app.clients.moorcheh import get_moorcheh_client
+
+            logger.debug("Initializing Moorcheh client via backend dispatcher")
+            self._moorcheh = get_moorcheh_client()
         return self._moorcheh
 
     def _get_write_service(self):

@@ -2,17 +2,23 @@
 MEMANTO CLI - Core commands (status, serve, ui, main_callback).
 """
 
+import json
 import os
 import platform
+import shutil
 import socket
+import subprocess
+import sys
 import threading
 import time
+from datetime import datetime
 
 import httpx
 import typer
 from rich.panel import Panel
 from rich.table import Table
 
+from memanto.app.clients.backend import Backend
 from memanto.cli.commands._shared import (
     ACCENT,
     BOLD_BRIGHT,
@@ -32,7 +38,7 @@ from memanto.cli.commands._shared import (
 
 
 def _first_run_setup() -> None:
-    """Interactive first-run setup: collect API key."""
+    """Interactive first-run setup: pick backend, then configure it."""
 
     console.print(
         Panel.fit(
@@ -43,7 +49,63 @@ def _first_run_setup() -> None:
     )
     console.print()
 
-    # API Key
+    backend = _prompt_backend_choice()
+    if backend == Backend.ON_PREM:
+        _onprem_setup()
+    else:
+        _cloud_setup()
+
+    # Common defaults
+    config_manager.set_server_config("127.0.0.1", 8000)
+    config_manager.set_cli_config(interactive_mode=True, smart_parse=True)
+    config_manager.set_backend(backend)
+
+    # Reset the backend dispatcher so the next call picks up the new choice.
+    from memanto.app.clients.moorcheh import moorcheh_client as _singleton
+    from memanto.app.config import settings as _settings
+
+    _settings.MEMANTO_BACKEND = backend.value
+    _singleton.reset_client()
+
+    backend_label = "Cloud" if backend == Backend.CLOUD else "On-Prem"
+    extras = (
+        "[dim]API Key:[/dim] [green]●[/green] configured"
+        if backend == Backend.CLOUD
+        else f"[dim]Server:[/dim] {config_manager.get_onprem_config()['url']}\n"
+        f"[dim]Embedding:[/dim] {config_manager.get_onprem_config()['embedding_provider'] or 'unknown'}"
+    )
+    console.print(
+        Panel(
+            "[bold green]Setup complete![/bold green]\n\n"
+            f"[dim]Backend:[/dim] {backend_label}\n"
+            f"[dim]Config:[/dim] {config_manager.config_dir}\n"
+            f"{extras}",
+            title="Ready",
+            border_style=SUCCESS,
+        )
+    )
+    console.print()
+
+
+def _prompt_backend_choice() -> Backend:
+    """Ask the user which backend they want. Default: Cloud."""
+    console.print(f"[{BOLD_BRIGHT}]Choose your backend[/{BOLD_BRIGHT}]")
+    console.print(
+        f"  [{BRIGHT}]1[/{BRIGHT}]  Moorcheh Cloud  "
+        "[dim](instant, needs API key, all features)[/dim]"
+    )
+    console.print(
+        f"  [{BRIGHT}]2[/{BRIGHT}]  Moorcheh On-Prem  "
+        "[dim](~5-10 min install, Docker required, no API key, "
+        "no `answer` command)[/dim]"
+    )
+    choice = typer.prompt("  Enter 1 or 2", default="1")
+    console.print()
+    return Backend.ON_PREM if str(choice).strip() == "2" else Backend.CLOUD
+
+
+def _cloud_setup() -> None:
+    """Cloud branch: collect and verify Moorcheh API key."""
     console.print(f"[{BOLD_BRIGHT}]Moorcheh API Key[/{BOLD_BRIGHT}]")
     console.print("[dim]Get yours free at https://console.moorcheh.ai[/dim]")
     api_key = typer.prompt("  Enter your Moorcheh API key", hide_input=True)
@@ -67,32 +129,220 @@ def _first_run_setup() -> None:
         except NamespaceNotFound:
             pass  # Key is valid
         except Exception as e:
-            # For other network errors, assume valid or warn, but don't strictly fail setup
             console.print(
                 f"[yellow]Could not fully verify API key (network issue?): {str(e)}[/yellow]"
             )
     except ImportError:
-        pass  # SDK not installed or available, skip verify
+        pass
 
     config_manager.set_api_key(api_key_clean)
     console.print("[green]  ✓ API key saved[/green]")
     console.print()
 
-    # Write basic default configs to config.yaml
-    config_manager.set_server_config("127.0.0.1", 8000)
-    config_manager.set_cli_config(interactive_mode=True, smart_parse=True)
 
-    # Done
+def _onprem_setup() -> None:
+    """On-prem branch: install moorcheh-client if missing, configure, start."""
     console.print(
-        Panel(
-            "[bold green]Setup complete![/bold green]\n\n"
-            f"[dim]Config:[/dim] {config_manager.config_dir}\n"
-            f"[dim]API Key:[/dim] [green]●[/green] configured",
-            title="Ready",
-            border_style=SUCCESS,
+        Panel.fit(
+            f"[{BOLD_PRIMARY}]Setting up Moorcheh On-Prem[/{BOLD_PRIMARY}]\n"
+            "[dim]This may take 5-10 minutes on first run.[/dim]",
+            border_style=PRIMARY,
         )
     )
     console.print()
+
+    _ensure_docker_available()
+    _ensure_moorcheh_client_installed()
+    embedding_provider, embedding_model, embedding_key = _prompt_embedding_provider()
+    _moorcheh_up_and_wait(embedding_provider, embedding_model, embedding_key)
+
+    # Ollama runs in a container started by `moorcheh up`; pull the embedding
+    # model inside that container now that the stack is healthy.
+    if embedding_provider == "ollama":
+        _pull_ollama_model_in_container(embedding_model)
+
+    # Persist on-prem config + write state.json under ~/.memanto/on-prem/.
+    onprem_dir = config_manager.config_dir / "on-prem"
+    onprem_dir.mkdir(parents=True, exist_ok=True)
+    state = {
+        "installed_at": datetime.utcnow().isoformat() + "Z",
+        "embedding_provider": embedding_provider,
+        "embedding_model": embedding_model,
+        "url": "http://localhost:8080",
+    }
+    (onprem_dir / "state.json").write_text(json.dumps(state, indent=2))
+    config_manager.set_onprem_config(
+        embedding_provider=embedding_provider, url="http://localhost:8080"
+    )
+
+
+def _ensure_docker_available() -> None:
+    """Fail clearly if Docker is missing or daemon is not running."""
+    if shutil.which("docker") is None:
+        _error(
+            "Docker is not installed (required for Moorcheh on-prem).",
+            hint="Install Docker Desktop: https://www.docker.com/products/docker-desktop",
+        )
+    try:
+        result = subprocess.run(
+            ["docker", "info"], capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            _error(
+                "Docker is installed but the daemon is not reachable.",
+                hint="Start Docker Desktop and try again.",
+            )
+    except Exception as e:
+        _error(
+            f"Could not run `docker info`: {e}",
+            hint="Make sure Docker Desktop is running.",
+        )
+    console.print("[green]  ✓ Docker is running[/green]")
+
+
+def _ensure_moorcheh_client_installed() -> None:
+    """pip install moorcheh-client if the ``moorcheh`` package is missing."""
+    import importlib.util
+
+    if importlib.util.find_spec("moorcheh") is not None:
+        console.print("[green]  ✓ moorcheh-client already installed[/green]")
+        return
+
+    console.print("[dim]  Installing moorcheh-client...[/dim]")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "moorcheh-client"]
+        )
+    except subprocess.CalledProcessError as e:
+        _error(f"Failed to install moorcheh-client: {e}")
+    console.print("[green]  ✓ moorcheh-client installed[/green]")
+
+
+def _prompt_embedding_provider() -> tuple[str, str, str]:
+    """Ask user for embedding provider. Returns (provider, model, api_key_or_empty)."""
+    console.print()
+    console.print(f"[{BOLD_BRIGHT}]Embedding provider[/{BOLD_BRIGHT}]")
+    console.print(
+        f"  [{BRIGHT}]1[/{BRIGHT}]  Ollama (local, zero API keys)  "
+        "[dim]- we'll pull the embedding model for you[/dim]"
+    )
+    console.print(
+        f"  [{BRIGHT}]2[/{BRIGHT}]  Bring your own (OpenAI or Cohere)  "
+        "[dim]- cloud-hosted embeddings, requires an API key[/dim]"
+    )
+    choice = typer.prompt("  Enter 1 or 2", default="1")
+    console.print()
+
+    if str(choice).strip() == "2":
+        console.print(
+            f"  [{BRIGHT}]a[/{BRIGHT}]  OpenAI   [{BRIGHT}]b[/{BRIGHT}]  Cohere"
+        )
+        sub = typer.prompt("  Enter a or b", default="a")
+        provider = "openai" if str(sub).strip().lower() != "b" else "cohere"
+        model = (
+            "text-embedding-3-small" if provider == "openai" else "embed-english-v3.0"
+        )
+        key = typer.prompt(f"  Enter your {provider.title()} API key", hide_input=True)
+        if not key or not key.strip():
+            _error(f"{provider.title()} API key cannot be empty.")
+        return provider, model, key.strip()
+
+    # Ollama: no native install needed. `moorcheh up` starts Ollama in a
+    # container; we pull the embedding model inside that container after the
+    # server is healthy (see _pull_ollama_model_in_container).
+    console.print(
+        "[dim]  Ollama will be started in a container by `moorcheh up`. "
+        "The embedding model will be pulled into that container.[/dim]"
+    )
+    return "ollama", "nomic-embed-text", ""
+
+
+def _pull_ollama_model_in_container(model: str) -> None:
+    """After ``moorcheh up`` started the stack, pull the embedding model
+    inside the Ollama container via ``docker exec``.
+
+    Looks for a running container with image ``ollama/ollama``; falls back to
+    name-match. Errors clearly with a manual command if we can't locate it.
+    """
+    container_id = ""
+    for filter_flag in ("ancestor=ollama/ollama", "name=ollama"):
+        try:
+            out = subprocess.check_output(
+                ["docker", "ps", "--filter", filter_flag, "--format", "{{.ID}}"],
+                text=True,
+            ).strip()
+        except subprocess.CalledProcessError:
+            out = ""
+        if out:
+            container_id = out.splitlines()[0]
+            break
+
+    if not container_id:
+        _error(
+            "Could not find a running Ollama container after `moorcheh up`.",
+            hint=(
+                "Run `docker ps` to find it, then: "
+                f"docker exec <id> ollama pull {model}"
+            ),
+        )
+
+    console.print(
+        f"[dim]  Pulling {model} inside Ollama container {container_id[:12]}...[/dim]"
+    )
+    try:
+        subprocess.check_call(["docker", "exec", container_id, "ollama", "pull", model])
+    except subprocess.CalledProcessError as e:
+        _error(f"Failed to pull embedding model inside container: {e}")
+    console.print("[green]  ✓ Embedding model ready in container[/green]")
+
+
+def _moorcheh_up_and_wait(provider: str, model: str, key: str) -> None:
+    """Run ``moorcheh up`` (with non-interactive embedding flags) and poll /health.
+
+    The documented non-interactive setup passes embedding settings to
+    ``moorcheh up`` directly via ``--embedding-provider``, ``--embedding-model``,
+    and ``--embedding-api-key``; ``moorcheh configure`` only supports
+    interactive prompts plus ``--force``, so we skip it.
+    """
+    args = [
+        "moorcheh",
+        "up",
+        "--embedding-provider",
+        provider,
+        "--embedding-model",
+        model,
+    ]
+    if key:
+        args.extend(["--embedding-api-key", key])
+
+    console.print("[dim]  Starting Moorcheh server (`moorcheh up`)...[/dim]")
+    try:
+        subprocess.check_call(args)
+    except FileNotFoundError:
+        _error(
+            "`moorcheh` CLI not found on PATH.",
+            hint="Re-open your terminal so pip's scripts directory is on PATH, "
+            "or run: python -m moorcheh up",
+        )
+    except subprocess.CalledProcessError as e:
+        _error(f"`moorcheh up` failed: {e}")
+
+    url = "http://localhost:8080/health"
+    console.print(f"[dim]  Waiting for {url}...[/dim]")
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        try:
+            resp = httpx.get(url, timeout=2.0)
+            if resp.status_code == 200:
+                console.print("[green]  ✓ Moorcheh server online[/green]")
+                return
+        except Exception:
+            pass
+        time.sleep(1.0)
+    _error(
+        f"Moorcheh server did not become healthy at {url} within 60s.",
+        hint="Check `moorcheh status` and Docker logs.",
+    )
 
 
 def version_callback(value: bool):
@@ -172,10 +422,29 @@ def status():
 
     cfg_table.add_row("Config Dir", str(config_manager.config_dir))
 
+    backend = config_manager.get_backend()
+    cfg_table.add_row("Backend", backend.value)
+    if backend == Backend.ON_PREM:
+        op = config_manager.get_onprem_config()
+        cfg_table.add_row("On-Prem URL", op.get("url", ""))
+        cfg_table.add_row("Embedding", op.get("embedding_provider") or "—")
+        # Probe on-prem server health
+        try:
+            r = httpx.get(f"{op.get('url', '').rstrip('/')}/health", timeout=2.0)
+            if r.status_code == 200:
+                cfg_table.add_row("On-Prem Server", "[green]● online[/green]")
+            else:
+                cfg_table.add_row(
+                    "On-Prem Server", f"[yellow]● status {r.status_code}[/yellow]"
+                )
+        except Exception:
+            cfg_table.add_row("On-Prem Server", "[red]● offline[/red]")
+
     server_url = f"http://{server_cfg['url']}:{server_cfg['port']}"
     if is_configured:
         cfg_table.add_row("Local REST API URL", server_url)
-        cfg_table.add_row("API Key", "[green]● configured[/green]")
+        if backend == Backend.CLOUD:
+            cfg_table.add_row("API Key", "[green]● configured[/green]")
     else:
         cfg_table.add_row("Local REST API URL", "[dim]not set[/dim]")
         cfg_table.add_row("API Key", "[red]● not configured[/red]")
@@ -411,13 +680,21 @@ def serve(
     )
 
     # Check if configured
-    api_key = config_manager.get_api_key()
-    if not api_key:
-        console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
-        console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
-        console.print("The server will start but won't be able to use Moorcheh.")
+    backend = config_manager.get_backend()
+    if backend == Backend.ON_PREM:
+        op = config_manager.get_onprem_config()
+        console.print(
+            f"\n[dim]Backend: on-prem at {op.get('url', 'http://localhost:8080')}[/dim]"
+        )
+        os.environ["MEMANTO_BACKEND"] = "on-prem"
     else:
-        os.environ["MOORCHEH_API_KEY"] = api_key
+        api_key = config_manager.get_api_key()
+        if not api_key:
+            console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
+            console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
+            console.print("The server will start but won't be able to use Moorcheh.")
+        else:
+            os.environ["MOORCHEH_API_KEY"] = api_key
 
     # Import uvicorn here to avoid loading FastAPI for CLI commands
     try:
@@ -486,12 +763,15 @@ def ui(
     port = port or server_cfg.get("port", 8000)
 
     # Check if configured
-    api_key = config_manager.get_api_key()
-    if not api_key:
-        console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
-        console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
+    if config_manager.get_backend() == Backend.ON_PREM:
+        os.environ["MEMANTO_BACKEND"] = "on-prem"
     else:
-        os.environ["MOORCHEH_API_KEY"] = api_key
+        api_key = config_manager.get_api_key()
+        if not api_key:
+            console.print("\n[yellow]Warning: MEMANTO not configured yet.[/yellow]")
+            console.print(f"Run [{BRIGHT}]memanto[/{BRIGHT}] to set up your API key.")
+        else:
+            os.environ["MOORCHEH_API_KEY"] = api_key
 
     try:
         import uvicorn

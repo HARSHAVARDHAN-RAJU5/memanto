@@ -2135,10 +2135,39 @@
             } catch (e) {
                 console.warn('Config load failed:', e);
             }
+            applyBackendVisibility();
             updateSidebarStatus();
             loadDashboard();
             // Load conflict count for badge
             loadConflictBadge();
+        }
+
+        // On-prem disables features the Moorcheh on-prem server doesn't expose
+        // (LLM answer, file upload). Hide those affordances; cloud is unchanged.
+        function isOnPrem() {
+            return !!(S.config && S.config.backend === 'on-prem');
+        }
+
+        function isBackendConfigured() {
+            return !!(S.config && (S.config.api_key_configured || isOnPrem()));
+        }
+
+        function applyBackendVisibility() {
+            const onPrem = isOnPrem();
+            const answerTab = document.querySelector('#pgTabs .tab[data-tab="ask"]');
+            const uploadTab = document.querySelector('#pgTabs .tab[data-tab="upload"]');
+            const answerPanel = document.getElementById('tab-ask');
+            const uploadPanel = document.getElementById('tab-upload');
+            [answerTab, uploadTab, answerPanel, uploadPanel].forEach(el => {
+                if (el) el.style.display = onPrem ? 'none' : '';
+            });
+            // If the previously-active tab is now hidden, fall back to Remember.
+            if (onPrem) {
+                const activeTab = document.querySelector('#pgTabs .tab.active');
+                if (activeTab && (activeTab.dataset.tab === 'ask' || activeTab.dataset.tab === 'upload')) {
+                    document.querySelector('#pgTabs .tab[data-tab="remember"]').click();
+                }
+            }
         }
 
         function updateSidebarStatus() {
@@ -2148,7 +2177,7 @@
                 dot.style.background = 'var(--success)';
                 dot.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.5)';
                 label.textContent = `${S.agentId} active`;
-            } else if (S.config && S.config.api_key_configured) {
+            } else if (isBackendConfigured()) {
                 dot.style.background = 'var(--warning)';
                 dot.style.boxShadow = '0 0 8px rgba(245, 158, 11, 0.5)';
                 label.textContent = 'No active session';
@@ -2181,8 +2210,8 @@
         async function loadAgents() {
             const box = document.getElementById('agentsContent');
             box.innerHTML = '<div class="loading-overlay"><span class="spinner"></span> Loading agents...</div>';
-            if (!S.config || !S.config.api_key_configured) {
-                box.innerHTML = '<p style="color:var(--text-dim);padding:20px">No API key configured. Set one in the Config page to manage agents.</p>';
+            if (!isBackendConfigured()) {
+                box.innerHTML = '<p style="color:var(--text-dim);padding:20px">No backend configured. Set one in the Config page to manage agents.</p>';
                 return;
             }
             try {
@@ -2298,7 +2327,9 @@
         <div class="card"><div class="card-label">Active Agent</div><div class="card-value" style="font-size:18px;color:var(--accent)">${S.agentId || '—'}</div><div class="card-sub">${S.config?.has_active_session ? 'Session active' : 'No session'}</div></div>
         <div class="card" style="cursor:pointer" onclick="goToPage('agents')" title="View all agents"><div class="card-label">Agents</div><div class="card-value">${agentCount}</div><div class="card-sub">registered — click to manage</div></div>
         <div class="card"><div class="card-label">System Health</div><div class="card-value" style="color:${healthColor};font-size:18px">${healthStatus}</div><div class="card-sub">Moorcheh connection</div></div>
-        <div class="card"><div class="card-label">API Key</div><div class="card-value" style="font-size:14px">${S.config?.api_key_configured ? '<span style="color:var(--success)">✓ Configured</span>' : '<span style="color:var(--error)">✗ Missing</span>'}</div><div class="card-sub">${S.config?.api_key_preview || ''}</div></div>
+        ${isOnPrem()
+            ? `<div class="card"><div class="card-label">Backend</div><div class="card-value" style="font-size:14px"><span style="color:var(--success)">On-Prem</span></div><div class="card-sub">${escHtml(S.config?.on_prem?.url || 'http://localhost:8080')}</div></div>`
+            : `<div class="card"><div class="card-label">API Key</div><div class="card-value" style="font-size:14px">${S.config?.api_key_configured ? '<span style="color:var(--success)">✓ Configured</span>' : '<span style="color:var(--error)">✗ Missing</span>'}</div><div class="card-sub">${S.config?.api_key_preview || ''}</div></div>`}
     `;
 
             if (S.agentId) {
@@ -2805,8 +2836,21 @@
                 const ans = c.answer || {};
                 const rec = c.recall || {};
 
+                const onPrem = isOnPrem();
+                const onPremCfg = c.on_prem || {};
                 document.getElementById('configContent').innerHTML = `
-            <!-- API KEY -->
+            <!-- BACKEND / API KEY -->
+            ${onPrem ? `
+            <div class="panel">
+                <div class="panel-title">🖥️ Backend</div>
+                <table class="config-table" style="width:100%"><tbody>
+                <tr><td>Mode</td><td><span class="badge badge-success">On-Prem</span></td></tr>
+                <tr><td>Server URL</td><td><code style="font-family:var(--font-mono)">${escHtml(onPremCfg.url || 'http://localhost:8080')}</code></td></tr>
+                <tr><td>Embedding Provider</td><td>${onPremCfg.embedding_provider ? `<code style="font-family:var(--font-mono)">${escHtml(onPremCfg.embedding_provider)}</code>` : '—'}</td></tr>
+                </tbody></table>
+                <p style="color:var(--text-dim);font-size:12px;margin-top:8px">Switch backends via CLI: <code style="color:var(--accent);font-family:var(--font-mono)">memanto config backend cloud</code></p>
+            </div>
+            ` : `
             <div class="panel">
                 <div class="panel-title">🔑 API Key</div>
                 <div id="apiKeyRow">
@@ -2825,13 +2869,14 @@
                     }
                 </div>
             </div>
+            `}
             <!-- STATUS (read-only) -->
             <div class="panel">
                 <div class="panel-title">📊 Status</div>
                 <table class="config-table" style="width:100%"><tbody>
                 <tr><td>Active Agent</td><td><strong style="color:var(--accent)">${c.active_agent_id || '—'}</strong></td></tr>
                 <tr><td>Active Session</td><td>${c.has_active_session ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-warning">No</span>'}</td></tr>
-                <tr><td>Config Directory</td><td><code style="font-family:var(--font-mono);color:var(--text-dim)">~/.memanto/</code></td></tr>
+                <tr><td>Data Directory</td><td><code style="font-family:var(--font-mono);color:var(--text-dim)">${escHtml(c.data_dir || '~/.memanto/')}</code></td></tr>
                 </tbody></table>
             </div>
             <!-- SERVER -->
@@ -2857,7 +2902,8 @@
                     ${cfgToggle('cfgSessAutoRenew', 'Auto-renew sessions before expiry', sess.auto_renew_enabled ?? true)}
                 </div>
             </div>
-            <!-- ANSWER CONFIG -->
+            <!-- ANSWER CONFIG (cloud only — on-prem server does not expose RAG) -->
+            ${onPrem ? '' : `
             <div class="panel">
                 <div class="panel-title">🤖 Answer Config</div>
                 <div class="form-group"><label>Model</label><input id="cfgAiModel" value="${ans.model || 'anthropic.claude-sonnet-4-20250514-v1:0'}" placeholder="e.g. anthropic.claude-sonnet-4-20250514-v1:0"></div>
@@ -2873,6 +2919,7 @@
                     ${cfgToggle('cfgAiKioskMode', 'Kiosk mode (apply threshold to filter low-relevance results)', ans.kiosk_mode ?? false)}
                 </div>
             </div>
+            `}
             <!-- TOP N LIMIT -->
             <div class="panel">
                 <div class="panel-title">🎯 Search & Retrieval</div>
@@ -2960,13 +3007,17 @@
                         auto_renew_enabled: document.getElementById('cfgSessAutoRenew').checked,
                         auto_renew_interval_hours: parseInt(document.getElementById('cfgSessRenewInterval').value) || 6,
                     },
-                    answer: {
-                        model: document.getElementById('cfgAiModel').value.trim(),
-                        temperature: parseFloat(document.getElementById('cfgAiTemp').value) || 0.7,
-                        answer_limit: parseInt(document.getElementById('cfgAiAnswerLimit').value) || 5,
-                        threshold: parseFloat(document.getElementById('cfgAiThreshold').value) || 0.25,
-                        kiosk_mode: document.getElementById('cfgAiKioskMode').checked,
-                    },
+                    // Answer Config panel is hidden on on-prem (no RAG support),
+                    // so its inputs may not be in the DOM — skip the block.
+                    ...(document.getElementById('cfgAiModel') ? {
+                        answer: {
+                            model: document.getElementById('cfgAiModel').value.trim(),
+                            temperature: parseFloat(document.getElementById('cfgAiTemp').value) || 0.7,
+                            answer_limit: parseInt(document.getElementById('cfgAiAnswerLimit').value) || 5,
+                            threshold: parseFloat(document.getElementById('cfgAiThreshold').value) || 0.25,
+                            kiosk_mode: document.getElementById('cfgAiKioskMode').checked,
+                        },
+                    } : {}),
                     recall: {
                         limit: parseInt(document.getElementById('cfgRecallLimit').value) || 10,
                         min_similarity: document.getElementById('cfgRecallMinSimilarity').value ? parseFloat(document.getElementById('cfgRecallMinSimilarity').value) : 0

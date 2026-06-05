@@ -14,6 +14,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv, set_key
 
+from memanto.app.clients.backend import Backend, parse_backend
+
 yaml = importlib.import_module("yaml")
 
 
@@ -63,8 +65,65 @@ class ConfigManager:
             pass  # Windows may not support chmod
 
     def is_configured(self) -> bool:
-        """Check if CLI has an API key configured."""
+        """Check if the active backend is configured.
+
+        Cloud: requires an API key.
+        On-prem: requires ``backend: on-prem`` persisted in config.yaml
+        (server reachability is verified at runtime, not here).
+        """
+        if self.get_backend() == Backend.ON_PREM:
+            return True
         return self.get_api_key() is not None
+
+    # Backend selection
+
+    def get_backend(self) -> Backend:
+        """Get the active backend (cloud or on-prem)."""
+        return parse_backend(self.load_yaml().get("backend"))
+
+    def set_backend(self, backend: Backend) -> None:
+        """Persist the active backend choice."""
+        self.set("backend", backend.value)
+
+    # On-prem config
+
+    def get_onprem_config(self) -> dict:
+        """Get on-prem config dict with defaults."""
+        defaults = {
+            "url": "http://localhost:8080",
+            "embedding_provider": "",
+        }
+        defaults.update(self.load_yaml().get("on_prem", {}))
+        return defaults
+
+    def set_onprem_config(
+        self,
+        embedding_provider: str | None = None,
+        url: str | None = None,
+    ) -> None:
+        """Persist on-prem config values."""
+        data = self.load_yaml()
+        on_prem = data.setdefault("on_prem", {})
+        if embedding_provider is not None:
+            on_prem["embedding_provider"] = embedding_provider
+        if url is not None:
+            on_prem["url"] = url
+        self.save_yaml(data)
+
+    # Per-backend data directory
+
+    def get_data_dir(self) -> Path:
+        """Root data dir for the active backend.
+
+        Cloud users keep ``~/.memanto/`` (no migration). On-prem data is
+        isolated under ``~/.memanto/on-prem/`` so switching backends does
+        not mix agents/sessions across them.
+        """
+        if self.get_backend() == Backend.ON_PREM:
+            d = self.config_dir / "on-prem"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+        return self.config_dir
 
     # YAML Config (non-sensitive settings)
 

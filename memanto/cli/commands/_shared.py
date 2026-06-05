@@ -89,13 +89,23 @@ def _warn(message: str) -> None:
 
 def get_client() -> SdkClient:
     """Get configured SDK client or exit if not initialized."""
-    api_key = config_manager.get_api_key()
+    from memanto.app.clients.backend import Backend
 
-    if not api_key:
-        _error("MEMANTO not configured.", hint="Run 'memanto' to set up your API key.")
-
-    # Ensure env is set for app services
-    os.environ["MOORCHEH_API_KEY"] = api_key
+    backend = config_manager.get_backend()
+    if backend == Backend.ON_PREM:
+        # On-prem: no API key needed. Pass a placeholder; the underlying
+        # OnPremClient ignores it (it talks to localhost:8080).
+        api_key = "on-prem"
+    else:
+        cfg_key = config_manager.get_api_key()
+        if not cfg_key:
+            _error(
+                "MEMANTO not configured.",
+                hint="Run 'memanto' to set up your API key.",
+            )
+        api_key = cfg_key
+        # Ensure env is set for app services on the cloud path.
+        os.environ["MOORCHEH_API_KEY"] = api_key
 
     client = SdkClient(api_key)
 

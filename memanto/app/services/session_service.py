@@ -13,7 +13,7 @@ from typing import Any
 
 import jwt
 
-from memanto.app.config import settings
+from memanto.app.config import get_data_dir, settings
 from memanto.app.core import create_memory_scope
 from memanto.app.models.session import (
     AgentPattern,
@@ -62,7 +62,7 @@ class SessionService:
             or "memanto-default-secret-change-in-production"
         )
         self.secret_key: str = resolved_secret_key
-        self.sessions_dir = sessions_dir or Path.home() / ".memanto" / "sessions"
+        self.sessions_dir = sessions_dir or get_data_dir() / "sessions"
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
 
     def _generate_namespace(self, agent_id: str) -> str:

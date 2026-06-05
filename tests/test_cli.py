@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
+from memanto.app.clients.backend import Backend
 from memanto.cli.main import app
 
 runner = CliRunner()
@@ -78,6 +79,11 @@ def mock_all_clients():
             }
             mock_cfg.get_recall_config.return_value = {"limit": 10}
             mock_cfg.get_schedule_time.return_value = "23:55"
+            mock_cfg.get_backend.return_value = Backend.CLOUD
+            mock_cfg.get_onprem_config.return_value = {
+                "url": "http://localhost:8080",
+                "embedding_provider": "",
+            }
             mock_cfg.config_dir = "/tmp/.memanto"
             patches.append(p_cfg)
         except (ImportError, AttributeError):
