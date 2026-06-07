@@ -1,0 +1,6 @@
+memanto>=2.1.4
+mem0ai
+groq
+tiktoken
+numpy
+python-dotenv
