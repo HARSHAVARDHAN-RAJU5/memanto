@@ -1,132 +1,141 @@
 {
-  "run_date": "2026-06-07T05:31:10.743976+00:00",
+  "run_date": "2026-06-07T05:59:56.606610+00:00",
   "judge_model": "llama-3.3-70b-versatile",
   "token_counter": "tiktoken cl100k_base",
+  "probe_runs_per_question": 3,
   "memanto": {
-    "total_tokens_ingested": 187,
-    "total_tokens_retrieved": 756,
-    "p95_latency_ms": 1285.7,
-    "accuracy_score": 0.5,
+    "total_tokens_ingested": 225,
+    "total_tokens_retrieved": 1017,
+    "p95_latency_ms": 1280.4,
+    "accuracy_score": 0.3,
     "probe_scores": [
       {
         "query": "What music does Alex like?",
         "expected": "metal (Tool, Metallica)",
-        "response": "Alex likes metal music and is vegan | Alex likes metal music and is vegan | Just discovered Knxwledge, loving the lo-fi hip-hop vibes.",
         "score": 0,
         "reason": "The response includes stale information about lo-fi hip-hop, which contradicts the current preference for metal music."
       },
       {
         "query": "What are Alex's dietary preferences or restrictions?",
         "expected": "vegan, egg allergy",
-        "response": "Alex likes metal music and is vegan | Alex likes metal music and is vegan | For diet I'm doing strict keto \u2014 no carbs at all.",
         "score": 0,
-        "reason": "The response includes stale information about a keto diet, which contradicts the current vegan preference."
+        "reason": "The response includes stale information about a keto diet, which contradicts the current vegan preference and does not mention the egg allergy."
       },
       {
         "query": "What time does Alex work out?",
         "expected": "morning before 7am",
-        "response": "I work out every morning, usually before 7am. | I work out every morning, usually before 7am. | I work out every morning, usually before 7am.",
         "score": 1,
         "reason": "The response correctly reflects the current preference that Alex works out every morning before 7am."
       },
       {
         "query": "What specific artists or bands does Alex listen to right now?",
         "expected": "Tool, Metallica",
-        "response": "Alex likes metal music and is vegan | Alex likes metal music and is vegan | I've been really into hip-hop lately, especially J. Cole and Kendrick.",
         "score": 0,
         "reason": "The response returns stale information by mentioning J. Cole and Kendrick, which are not the current preferences of Alex."
       },
       {
         "query": "Does Alex have any food allergies?",
         "expected": "yes, egg allergy",
-        "response": "Alex likes metal music and is vegan | Alex likes metal music and is vegan | Egg allergy is serious, even trace amounts affect me.",
         "score": 1,
         "reason": "The response correctly reflects the current preference by mentioning the egg allergy."
       },
       {
         "query": "Is it safe to serve Alex a dish that contains eggs?",
         "expected": "no, Alex has a severe egg allergy",
-        "response": "Egg allergy is serious, even trace amounts affect me. | Egg allergy is serious, even trace amounts affect me. | Egg allergy is serious, even trace amounts affect me.",
-        "score": 1,
-        "reason": "The response correctly reflects the current preference by indicating a severe egg allergy."
+        "score": 0,
+        "reason": "The response contains conflicting and stale information, failing to accurately reflect Alex's current severe egg allergy."
       },
       {
         "query": "What diet did Alex follow before going vegan?",
         "expected": "keto diet",
-        "response": "Alex likes metal music and is vegan | Alex likes metal music and is vegan | Vegan cooking is harder than I thought but worth it.",
         "score": 0,
-        "reason": "The response does not mention the diet Alex followed before going vegan, which is the keto diet."
+        "reason": "The response does not provide any information about Alex's diet before going vegan, which is the keto diet."
       },
       {
         "query": "Has Alex's music taste changed over time? What genres did they go through?",
         "expected": "yes \u2014 hip-hop, then jazz, then metal",
-        "response": "Alex likes metal music and is vegan | Alex likes metal music and is vegan | Okay jazz was a phase. Now it's metal \u2014 Metallica, Tool.",
         "score": 1,
         "reason": "The response correctly reflects the current preference for metal music."
+      },
+      {
+        "query": "Does Alex still have an egg allergy?",
+        "expected": "uncertain \u2014 Alex previously reported a severe egg allergy but recently ate eggs with no reaction",
+        "score": 0,
+        "reason": "The response repeats stale information about the severity of egg allergies without addressing the current uncertainty about Alex's allergy status."
+      },
+      {
+        "query": "Is Alex's egg allergy confirmed or has it been questioned?",
+        "expected": "questioned \u2014 Alex ate eggs recently with no reaction despite previously reporting a severe allergy",
+        "score": 0,
+        "reason": "The response repeats stale information about the severity of the allergy without addressing the current preference that the allergy has been questioned due to Alex eating eggs with no reaction."
       }
     ]
   },
   "mem0": {
-    "total_tokens_ingested": 187,
-    "total_tokens_retrieved": 5236,
-    "p95_latency_ms": 616.0,
-    "accuracy_score": 0.125,
+    "total_tokens_ingested": 225,
+    "total_tokens_retrieved": 6669,
+    "p95_latency_ms": 817.9,
+    "accuracy_score": 0.1,
     "probe_scores": [
       {
         "query": "What music does Alex like?",
         "expected": "metal (Tool, Metallica)",
-        "response": "User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User has recently started listening to jazz music, exploring artists such as Miles Davis and John Coltrane | User expresses enthusiasm for jazz, stating that Bill Evans is incredible | User has been really into hip\u2011hop lately, especially listening to J.\u202fCole and Kendrick\u202fLamar | User says jazz was a phase and has switched to metal music, now listening to Metallica and Tool | User regards Tool's album \"Fear Inoculum\" as a masterpiece | User is meal prepping keto bowls for the upcoming week as part of their strict keto diet | User follows a strict keto diet, eliminating all carbohydrates from their meals | User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen",
         "score": 1,
-        "reason": "The response correctly reflects the current preference of Alex liking metal music, specifically Tool and Metallica, after switching from other genres and diets."
+        "reason": "The response correctly reflects the current preference, which is metal music, as indicated by the user's latest statements about Tool and Metallica."
       },
       {
         "query": "What are Alex's dietary preferences or restrictions?",
         "expected": "vegan, egg allergy",
-        "response": "User is meal prepping keto bowls for the upcoming week as part of their strict keto diet | User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen | User discovered an egg allergy on June 6, 2026, while remaining on a vegan diet | User remains on a strict keto diet and has lost 5\u202fkg so far | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User follows a strict keto diet, eliminating all carbohydrates from their meals | User has been really into hip\u2011hop lately, especially listening to J.\u202fCole and Kendrick\u202fLamar | User expresses enthusiasm for jazz, stating that Bill Evans is incredible | User reports that their egg allergy is severe, with even trace amounts causing a reaction",
         "score": 0,
-        "reason": "The response contains stale information and does not correctly reflect the current dietary preferences of being vegan with an egg allergy."
+        "reason": "The response contains stale information about the user's diet, mentioning a strict keto diet, which contradicts the current preference of being vegan with an egg allergy."
       },
       {
         "query": "What time does Alex work out?",
         "expected": "morning before 7am",
-        "response": "User works out every morning, typically completing the exercise session before 7\u202fAM | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User has been really into hip\u2011hop lately, especially listening to J.\u202fCole and Kendrick\u202fLamar | User expresses enthusiasm for jazz, stating that Bill Evans is incredible | User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen | User is meal prepping keto bowls for the upcoming week as part of their strict keto diet | User discovered an egg allergy on June 6, 2026, while remaining on a vegan diet | User has recently started listening to jazz music, exploring artists such as Miles Davis and John Coltrane | User follows a strict keto diet, eliminating all carbohydrates from their meals",
         "score": 0,
-        "reason": "The response contains stale information about the user's diet, which contradicts the current preference of a fully vegan diet."
+        "reason": "The response contains stale and irrelevant information, failing to clearly state the current workout time preference."
       },
       {
         "query": "What specific artists or bands does Alex listen to right now?",
         "expected": "Tool, Metallica",
-        "response": "User has recently started listening to jazz music, exploring artists such as Miles Davis and John Coltrane | User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User has been really into hip\u2011hop lately, especially listening to J.\u202fCole and Kendrick\u202fLamar | User says jazz was a phase and has switched to metal music, now listening to Metallica and Tool | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User expresses enthusiasm for jazz, stating that Bill Evans is incredible | User regards Tool's album \"Fear Inoculum\" as a masterpiece | User discovered an egg allergy on June 6, 2026, while remaining on a vegan diet | User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen | User is meal prepping keto bowls for the upcoming week as part of their strict keto diet",
         "score": 0,
-        "reason": "The response provides multiple conflicting answers, including stale information about the user's past music preferences, rather than consistently reflecting the current preference for Tool and Metallica."
+        "reason": "The response contains stale and wrong answers, and only briefly mentions the current preference of listening to Metallica and Tool."
       },
       {
         "query": "Does Alex have any food allergies?",
         "expected": "yes, egg allergy",
-        "response": "User reports that their egg allergy is severe, with even trace amounts causing a reaction | User discovered an egg allergy on June 6, 2026, while remaining on a vegan diet | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User remains on a strict keto diet and has lost 5\u202fkg so far | User is meal prepping keto bowls for the upcoming week as part of their strict keto diet | User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen | User follows a strict keto diet, eliminating all carbohydrates from their meals | User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User has been really into hip\u2011hop lately, especially listening to J.\u202fCole and Kendrick\u202fLamar | User discovered the artist Knxwledge on June 7, 2026 and loves the lo\u2011fi hip\u2011hop vibes of their music",
         "score": 0,
         "reason": "The response contains stale information about the user's diet and does not clearly confirm the current preference of having an egg allergy."
       },
       {
         "query": "Is it safe to serve Alex a dish that contains eggs?",
         "expected": "no, Alex has a severe egg allergy",
-        "response": "User discovered an egg allergy on June 6, 2026, while remaining on a vegan diet | User reports that their egg allergy is severe, with even trace amounts causing a reaction | User is meal prepping keto bowls for the upcoming week as part of their strict keto diet | User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen | User regards Tool's album \"Fear Inoculum\" as a masterpiece | User expresses enthusiasm for jazz, stating that Bill Evans is incredible | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User follows a strict keto diet, eliminating all carbohydrates from their meals | User discovered the artist Knxwledge on June 7, 2026 and loves the lo\u2011fi hip\u2011hop vibes of their music",
         "score": 0,
         "reason": "The response contains stale information about the user's diet, mentioning both a strict keto diet and a fully vegan diet, but does not clearly state the current preference regarding eggs."
       },
       {
         "query": "What diet did Alex follow before going vegan?",
         "expected": "keto diet",
-        "response": "User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen | User follows a strict keto diet, eliminating all carbohydrates from their meals | User discovered an egg allergy on June 6, 2026, while remaining on a vegan diet | User is meal prepping keto bowls for the upcoming week as part of their strict keto diet | User remains on a strict keto diet and has lost 5\u202fkg so far | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User discovered the artist Knxwledge on June 7, 2026 and loves the lo\u2011fi hip\u2011hop vibes of their music | User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User has been really into hip\u2011hop lately, especially listening to J.\u202fCole and Kendrick\u202fLamar | User finds vegan cooking harder than expected but considers it worthwhile, reflecting their recent transition to a fully vegan diet",
         "score": 0,
         "reason": "The response provides stale information about the user's past keto diet instead of confirming their current vegan diet preference."
       },
       {
         "query": "Has Alex's music taste changed over time? What genres did they go through?",
         "expected": "yes \u2014 hip-hop, then jazz, then metal",
-        "response": "User says jazz was a phase and has switched to metal music, now listening to Metallica and Tool | User recently discovered the artist Knxwledge and enjoys the lo\u2011fi hip\u2011hop vibes of their music | User says hip\u2011hop is life and has added Freddie Gibbs to their music rotation, indicating a strong interest in listening to Freddie Gibbs' hip\u2011hop tracks | User has recently started listening to jazz music, exploring artists such as Miles Davis and John Coltrane | User has been really into hip\u2011hop lately, especially listening to J.\u202fCole and Kendrick\u202fLamar | User discovered the artist Knxwledge on June 7, 2026 and loves the lo\u2011fi hip\u2011hop vibes of their music | User expresses enthusiasm for jazz, stating that Bill Evans is incredible | User regards Tool's album \"Fear Inoculum\" as a masterpiece | User switched from a strict keto diet to a fully vegan diet during the week of May 30, 2026, ending their keto regimen | User is meal prepping keto bowls for the upcoming week as part of their strict keto diet",
         "score": 0,
         "reason": "The response provides multiple, conflicting music preferences over time, but does not clearly indicate the current preference as hip-hop, then jazz, then metal."
+      },
+      {
+        "query": "Does Alex still have an egg allergy?",
+        "expected": "uncertain \u2014 Alex previously reported a severe egg allergy but recently ate eggs with no reaction",
+        "score": 0,
+        "reason": "The response provides stale information about Alex's diet and music preferences, but does not address the current state of their egg allergy."
+      },
+      {
+        "query": "Is Alex's egg allergy confirmed or has it been questioned?",
+        "expected": "questioned \u2014 Alex ate eggs recently with no reaction despite previously reporting a severe allergy",
+        "score": 0,
+        "reason": "The response does not mention Alex's recent consumption of eggs with no reaction, and instead provides unrelated information about the user's diet, music preferences, and discovery of new artists."
       }
     ]
   }
