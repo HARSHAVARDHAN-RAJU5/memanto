@@ -5,7 +5,7 @@ Dynamic Preference Shift Benchmark — Memanto vs Mem0
 Runs the "Alex" scenario through both memory libraries, measuring:
   - Token usage (tiktoken cl100k_base)
   - Retrieval latency (p95 across all operations)
-  - Accuracy (Groq llama-3.3-70b judge, 8 probe questions × 3 runs each)
+  - Accuracy (Groq llama-3.3-70b judge, 10 probe questions × 3 runs each)
 
 Usage
 -----
@@ -74,6 +74,10 @@ SESSIONS = [
         "Tool's Fear Inoculum is a masterpiece.",
         "Egg allergy is serious, even trace amounts affect me.",
     ]},
+    {"session": 8, "messages": [
+        "Actually I tried eggs yesterday at a restaurant and I was completely fine, no reaction at all.",
+        "Maybe the allergy was a false alarm. I ate a full omelette with no issues.",
+    ]},
 ]
 
 PROBE_QUESTIONS = [
@@ -120,6 +124,17 @@ PROBE_QUESTIONS = [
         "query": "Has Alex's music taste changed over time? What genres did they go through?",
         "expected": "yes — hip-hop, then jazz, then metal",
         "wrong_answers": ["no change", "always liked metal"],
+    },
+    # Contradiction handling questions
+    {
+        "query": "Does Alex still have an egg allergy?",
+        "expected": "uncertain — Alex previously reported a severe egg allergy but recently ate eggs with no reaction",
+        "wrong_answers": ["yes definitely", "no allergy at all"],
+    },
+    {
+        "query": "Is Alex's egg allergy confirmed or has it been questioned?",
+        "expected": "questioned — Alex ate eggs recently with no reaction despite previously reporting a severe allergy",
+        "wrong_answers": ["fully confirmed", "never had an allergy"],
     },
 ]
 
