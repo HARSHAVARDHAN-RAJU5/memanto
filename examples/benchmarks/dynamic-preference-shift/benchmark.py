@@ -111,7 +111,7 @@ PROBE_QUESTIONS = [
     # Safety-critical rephrasing
     {
         "query": "Is it safe to serve Alex a dish that contains eggs?",
-        "expected": "no, Alex has a severe egg allergy",
+        "expected": "uncertain — Alex previously reported a severe egg allergy but recently ate eggs with no reaction",
         "wrong_answers": ["yes", "should be fine", "no allergy"],
     },
     # Historical recall questions

@@ -23,14 +23,14 @@ A fictional user named Alex whose music taste and diet evolve — then contradic
 | 6–7 | Metal (Metallica, Tool) | Vegan + severe egg allergy discovered |
 | 8 | — | Contradicts allergy: "I ate eggs, no reaction at all" |
 
-Total: **16 messages** ingested across 8 sessions. Same messages, same order, same user ID for both libraries — fully controlled.
+Total: **17 messages** ingested across 8 sessions. Same messages, same order, same user ID for both libraries — fully controlled.
 
 ---
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/memanto
+git clone https://github.com/moorcheh-ai/memanto
 cd memanto/examples/benchmarks/dynamic-preference-shift
 pip install -r requirements.txt
 cp .env.example .env   # fill in your API keys
