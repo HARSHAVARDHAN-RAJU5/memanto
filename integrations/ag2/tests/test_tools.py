@@ -71,6 +71,11 @@ def test_memanto_recall_formats_results():
 def test_memanto_remember_retries_after_session_error():
     client = MagicMock()
     client.agent_id = None
+
+    def _activate(agent_id: str, duration_hours: int = 6) -> None:
+        client.agent_id = agent_id
+
+    client.activate_agent.side_effect = _activate
     client.remember.side_effect = [SessionError("no session"), {"memory_id": "mem-2"}]
 
     remember = create_memanto_tools(client, "test-agent")[0]

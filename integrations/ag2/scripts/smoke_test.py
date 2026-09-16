@@ -130,7 +130,7 @@ def main() -> int:
     print("  remember: OK")
 
     _step(2, "recall — semantic search (new session, same agent_id)")
-    recall_query = f"What is the user's {secret_marker}?"
+    recall_query = "What is the user's favorite color for AG2 smoke tests?"
     recall_out = ""
     for attempt in range(1, 6):
         recall_out = recall(query=recall_query, limit=10)
@@ -147,7 +147,9 @@ def main() -> int:
         return 1
 
     _step(3, "answer — RAG over memories (memanto_answer / reflect-style)")
-    answer_out = answer(question=recall_query)
+    answer_out = answer(
+        question="What favorite color preference was stored for AG2 smoke tests?"
+    )
     if (
         "teal" not in answer_out.lower()
         and secret_marker.lower() not in answer_out.lower()
@@ -232,7 +234,10 @@ def main() -> int:
                     ),
                     max_turns=2,
                 )
-                verify = recall(query=f"What does {chat_marker} like?", limit=5)
+                verify = recall(
+                    query="What outdoor activity or hobby preference was stored?",
+                    limit=5,
+                )
                 if chat_marker.lower() in verify.lower() or "hiking" in verify.lower():
                     print("  AG2 chat + recall verify: OK")
                 else:

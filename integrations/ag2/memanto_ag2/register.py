@@ -51,20 +51,25 @@ def register_memanto_tools(
         include_answer=include_answer,
     )
 
+    llm_registers: list[Any] = []
     for agent in llm_agents:
         register_llm = getattr(agent, "register_for_llm", None)
         if register_llm is None:
             raise TypeError(
                 f"{type(agent).__name__} has no register_for_llm; pass AG2 AssistantAgent instances"
             )
-        for tool_fn in tools:
-            register_llm(description=(tool_fn.__doc__ or "").strip())(tool_fn)
+        llm_registers.append(register_llm)
 
     register_exec = getattr(executor, "register_for_execution", None)
     if register_exec is None:
         raise TypeError(
             f"{type(executor).__name__} has no register_for_execution; pass a UserProxyAgent"
         )
+
+    for register_llm in llm_registers:
+        for tool_fn in tools:
+            register_llm(description=(tool_fn.__doc__ or "").strip())(tool_fn)
+
     for tool_fn in tools:
         register_exec()(tool_fn)
 

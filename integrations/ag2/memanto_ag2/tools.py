@@ -1,5 +1,6 @@
 """AG2-compatible Memanto tool functions (module-level callables for JSON schema generation)."""
 
+import functools
 import re
 from collections.abc import Callable
 from contextvars import ContextVar
@@ -105,7 +106,10 @@ def memanto_remember(
 
 def memanto_recall(
     query: Annotated[str, _tool_field("Natural language search over stored memories.")],
-    limit: Annotated[int, _tool_field("Max memories to return (1-100).")] = 10,
+    limit: Annotated[
+        int | None,
+        _tool_field("Max memories to return (1-100). Omit for configured default."),
+    ] = None,
     memory_types: Annotated[
         str,
         _tool_field(
@@ -118,7 +122,10 @@ def memanto_recall(
     if runtime is None:
         raise RuntimeError("Memanto AG2 tools are not bound to a client/agent_id")
 
-    limit_val = max(1, min(100, limit))
+    if limit is None:
+        limit_val = max(1, min(100, runtime.recall_limit))
+    else:
+        limit_val = max(1, min(100, limit))
 
     type_list = (
         [t.strip() for t in memory_types.split(",") if t.strip()]
@@ -173,6 +180,18 @@ def memanto_answer(
     return output
 
 
+def _with_runtime(runtime: _ToolRuntime, fn: Callable[..., str]) -> Callable[..., str]:
+    @functools.wraps(fn)
+    def bound(*args: Any, **kwargs: Any) -> str:
+        token = _runtime.set(runtime)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _runtime.reset(token)
+
+    return bound
+
+
 def create_memanto_tools(
     client: SdkClient,
     agent_id: str,
@@ -186,8 +205,7 @@ def create_memanto_tools(
     """
     Return Memanto tool callables for AG2 registration.
 
-    Sets a runtime binding used while tools execute (supports multiple adapters
-    in one process if they do not run concurrently).
+    Each returned callable binds its own runtime at invocation time.
     """
     runtime = _ToolRuntime(
         session=AgentSessionBinder(client, agent_id),
@@ -196,13 +214,12 @@ def create_memanto_tools(
         source=source,
         recall_limit=recall_limit,
     )
-    _runtime.set(runtime)
 
     selected: list[Callable[..., str]] = []
     if include_remember:
-        selected.append(memanto_remember)
+        selected.append(_with_runtime(runtime, memanto_remember))
     if include_recall:
-        selected.append(memanto_recall)
+        selected.append(_with_runtime(runtime, memanto_recall))
     if include_answer:
-        selected.append(memanto_answer)
+        selected.append(_with_runtime(runtime, memanto_answer))
     return selected

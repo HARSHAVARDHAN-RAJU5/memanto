@@ -19,11 +19,11 @@ From the Memanto repo:
 ```bash
 pip install -e .                      # repo root → memanto
 pip install -e integrations/ag2       # memanto-ag2
-pip install "memanto-ag2[ag2]"          # optional: AG2 runtime for examples
+pip install "memanto-ag2[ag2]"        # optional: AG2 runtime for examples
+```
 
 > **Package name:** install **`ag2`** (AI agents), not **`a2g`** (unrelated bioinformatics tool).  
 > **Version:** use **`ag2>=0.9,<1`** — `ag2` 1.x is a new framework; this integration uses `from autogen import AssistantAgent` (0.9.x).
-```
 
 Set your Moorcheh API key:
 
@@ -100,20 +100,19 @@ register_memanto_tools(assistant, executor=executor, agent_id="my-bank")
 
 ### Unit tests (no API key)
 
-```powershell
-cd "c:\Users\patel\Downloads\Edge AI\memanto\integrations\ag2"
-$env:PYTHONPATH = "memanto_ag2;c:\Users\patel\Downloads\Edge AI\memanto"
-python -m pytest tests\test_tools.py -q
+From the repository root (after `pip install -e .` and `pip install -e integrations/ag2`):
+
+```bash
+python -m pytest integrations/ag2/tests/test_tools.py -q
 ```
 
 ### Live smoke script (real API)
 
-From repo root (no `PYTHONPATH` needed):
+From the repository root (no `PYTHONPATH` needed):
 
-```powershell
-cd "c:\Users\patel\Downloads\Edge AI\memanto"
-$env:MOORCHEH_API_KEY = "your-moorcheh-api-key"
-python integrations\ag2\scripts\smoke_test.py
+```bash
+export MOORCHEH_API_KEY=your-moorcheh-api-key
+python integrations/ag2/scripts/smoke_test.py
 ```
 
 Optional Step 6 runs a real AG2 chat when `OPENAI_API_KEY` is set and `ag2` is installed.
@@ -122,10 +121,11 @@ Optional Step 6 runs a real AG2 chat when `OPENAI_API_KEY` is set and `ag2` is i
 
 ### Pytest live smoke
 
-```powershell
-cd "c:\Users\patel\Downloads\Edge AI\memanto\integrations\ag2"
-$env:PYTHONPATH = "memanto_ag2;c:\Users\patel\Downloads\Edge AI\memanto"
-python -m pytest tests\test_tools_live.py -q
+From the repository root:
+
+```bash
+export MOORCHEH_API_KEY=your-moorcheh-api-key
+python -m pytest integrations/ag2/tests/test_tools_live.py -q
 ```
 
 ## Requirements
