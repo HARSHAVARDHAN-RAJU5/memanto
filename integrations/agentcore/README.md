@@ -34,8 +34,8 @@ Only `[A-Za-z0-9_-]` are allowed in Memanto agent ids; colons from other systems
 From the Memanto repo (until PyPI package ships):
 
 ```bash
-pip install memanto
-# Adapter code: integrations/agentcore/memanto_agentcore
+pip install -e .   # from Memanto repo root
+pip install -e integrations/agentcore
 ```
 
 Set your Moorcheh API key (same as CLI):
@@ -100,7 +100,7 @@ Preferred identity sources (in order):
 2. `X-Amzn-Bedrock-AgentCore-Runtime-User-Id` header  
 3. Application-supplied user ID in trusted server-side deployments  
 
-If `user_id` is missing, the default resolver raises `AgentResolutionError` (fail closed — no cross-user leakage).
+If `user_id` is missing or blank, `resolve_agent_id()` raises `AgentResolutionError` before any custom or default resolver runs (fail closed — no cross-user leakage).
 
 ## Custom agent id resolution
 

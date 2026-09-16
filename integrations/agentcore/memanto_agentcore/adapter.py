@@ -48,13 +48,15 @@ def default_agent_id_resolver(context: TurnContext) -> str:
         raise AgentResolutionError("agent_name is required")
 
     tenant = (context.tenant_id or "default").strip()
-    raw = f"tenant-{tenant}-user-{context.user_id.strip()}-agent-{context.agent_name.strip()}"
-    sanitized = _AGENT_ID_RE.sub("_", raw)
+    user = context.user_id.strip()
+    agent = context.agent_name.strip()
+    structured = "\x1f".join((tenant, user, agent))
+    readable = f"tenant-{tenant}-user-{user}-agent-{agent}"
+    sanitized = _AGENT_ID_RE.sub("_", readable)
     if len(sanitized) <= _MAX_AGENT_ID_LENGTH:
         return sanitized
-    suffix = hashlib.sha256(raw.encode()).hexdigest()[:8]
-    keep = _MAX_AGENT_ID_LENGTH - len(suffix) - 1
-    return f"{sanitized[:keep]}-{suffix}"
+    digest = hashlib.sha256(structured.encode("utf-8")).hexdigest()
+    return digest[:_MAX_AGENT_ID_LENGTH]
 
 
 def _format_recall(memories: list[dict[str, Any]]) -> str:
@@ -101,6 +103,10 @@ class MemantoRuntimeAdapter:
         self._session_ready: set[str] = set()
 
     def resolve_agent_id(self, context: TurnContext) -> str:
+        if not (context.user_id or "").strip():
+            raise AgentResolutionError(
+                "user_id is required for cross-session memory; do not use runtimeSessionId"
+            )
         if context.agent_name:
             return self._agent_id_resolver(context)
         if self._default_agent_name:
@@ -116,24 +122,27 @@ class MemantoRuntimeAdapter:
         raise AgentResolutionError("agent_name missing and no default configured")
 
     async def _ensure_session(self, agent_id: str) -> None:
-        if agent_id in self._session_ready:
-            return
-        async with self._setup_lock:
-            if agent_id in self._session_ready:
-                return
+        """Bind the shared SdkClient to *agent_id* (caller must hold ``_setup_lock``)."""
+        if agent_id not in self._session_ready:
 
-            def _setup() -> None:
+            def _create() -> None:
                 try:
                     self._client.create_agent(agent_id=agent_id, pattern="tool")
                 except Exception as exc:
                     logger.debug("create_agent ignored for %s: %s", agent_id, exc)
+
+            await asyncio.to_thread(_create)
+            self._session_ready.add(agent_id)
+
+        if self._client.agent_id != agent_id:
+
+            def _activate() -> None:
                 try:
                     self._client.activate_agent(agent_id, duration_hours=6)
                 except Exception as exc:
                     logger.debug("activate_agent ignored for %s: %s", agent_id, exc)
 
-            await asyncio.to_thread(_setup)
-            self._session_ready.add(agent_id)
+            await asyncio.to_thread(_activate)
 
     async def before_turn(self, context: TurnContext, *, query: str) -> str:
         """Recall memories for *query*; returns prompt context or \"\" on failure."""
@@ -146,20 +155,22 @@ class MemantoRuntimeAdapter:
             return ""
 
         try:
-            await self._ensure_session(agent_id)
+            async with self._setup_lock:
+                await self._ensure_session(agent_id)
 
-            def _recall() -> dict[str, Any]:
-                try:
+                def _recall() -> dict[str, Any]:
                     return self._client.recall(
                         agent_id=agent_id,
                         query=query,
                         limit=self._recall_limit,
                     )
+
+                try:
+                    result = await asyncio.to_thread(_recall)
                 except SessionError:
                     self._session_ready.discard(agent_id)
-                    raise
-
-            result = await asyncio.to_thread(_recall)
+                    await self._ensure_session(agent_id)
+                    result = await asyncio.to_thread(_recall)
         except Exception as exc:
             logger.warning("Memanto recall failed (continuing without memory): %s", exc)
             return ""
@@ -203,25 +214,26 @@ class MemantoRuntimeAdapter:
         title = _truncate_title(query)
 
         async def _retain_once() -> None:
-            await self._ensure_session(agent_id)
-
-            def _remember() -> None:
-                self._client.remember(
-                    agent_id=agent_id,
-                    memory_type=self._retain_memory_type,
-                    title=title,
-                    content=content,
-                    source=self._retain_source,
-                    provenance="observed",
-                    tags=["agentcore", "turn"],
-                )
-
-            try:
-                await asyncio.to_thread(_remember)
-            except SessionError:
-                self._session_ready.discard(agent_id)
+            async with self._setup_lock:
                 await self._ensure_session(agent_id)
-                await asyncio.to_thread(_remember)
+
+                def _remember() -> None:
+                    self._client.remember(
+                        agent_id=agent_id,
+                        memory_type=self._retain_memory_type,
+                        title=title,
+                        content=content,
+                        source=self._retain_source,
+                        provenance="observed",
+                        tags=["agentcore", "turn"],
+                    )
+
+                try:
+                    await asyncio.to_thread(_remember)
+                except SessionError:
+                    self._session_ready.discard(agent_id)
+                    await self._ensure_session(agent_id)
+                    await asyncio.to_thread(_remember)
 
         try:
             await _retain_once()
