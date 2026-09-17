@@ -1,6 +1,6 @@
 # AG2 (AutoGen) + Memanto
 
-Persistent long-term memory for [AG2](https://github.com/ag2ai/ag2) agents via Memanto — the same **remember → recall → answer** pattern as [Hindsight’s AG2 integration](https://hindsight.vectorize.io/sdks/integrations/ag2).
+Persistent long-term memory for [AG2](https://github.com/ag2ai/ag2) agents via Memanto — **remember → recall → answer** tools your assistant can call during chat.
 
 > **Status:** Preview package in this folder. Run unit tests before relying on it in production.
 
@@ -10,7 +10,7 @@ Persistent long-term memory for [AG2](https://github.com/ag2ai/ag2) agents via M
 - **AG2-native** — Plain functions with `Annotated` type hints for `@register_for_llm` / `@register_for_execution`
 - **GroupChat** — Register the same `agent_id` on multiple assistants; one executor runs tool calls
 - **Selective tools** — `include_remember`, `include_recall`, `include_answer`
-- **Shared namespace** — One Memanto `agent_id` per team or app (like Hindsight’s `bank_id`)
+- **Shared namespace** — One Memanto `agent_id` per team or app
 
 ## Installation (preview)
 
@@ -84,7 +84,7 @@ manager = GroupChatManager(groupchat=group_chat)
 |-------------------------|-------------|------|
 | `memanto_remember` | `remember()` | Store typed, tagged memories |
 | `memanto_recall` | `recall()` | Semantic search |
-| `memanto_answer` | `answer()` | RAG-style synthesis (Hindsight “reflect”) |
+| `memanto_answer` | `answer()` | RAG-style synthesis over stored memories |
 
 ## Configuration
 
