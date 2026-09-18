@@ -337,10 +337,9 @@ def test_shared_remember_tool_stores_untagged_lesson_even_if_model_says_caller()
     assert stored["memory_type"] == "fact" and stored["source"] == "vapi"
 
 
-@pytest.mark.parametrize(
-    ("about_caller", "expect_private"), [(True, True), (None, True), (False, False)]
-)
-def test_caller_remember_tool_privacy(about_caller, expect_private):
+@pytest.mark.parametrize("about_caller", [None, True, False])
+def test_caller_scope_tool_always_writes_to_the_caller(about_caller):
+    """The model cannot talk one caller's details into everyone's context."""
     fake = FakeClient()
     memory = caller_memory(fake)
     arguments: dict[str, Any] = {"content": "Prefers mornings", "type": "preference"}
@@ -350,7 +349,7 @@ def test_caller_remember_tool_privacy(about_caller, expect_private):
         body = post(client, tool_message(REMEMBER_TOOL, arguments)).json()
     assert body["results"][0]["result"] == "Saved."
     tags = fake.all_kwargs("remember")[0]["tags"]
-    assert (memory.caller_tag("number:+15551234567") in tags) is expect_private
+    assert memory.caller_tag("number:+15551234567") in tags
 
 
 @pytest.mark.parametrize(
@@ -359,6 +358,7 @@ def test_caller_remember_tool_privacy(about_caller, expect_private):
         (REMEMBER_TOOL, {"content": "x", "type": "nonsense"}, CALLER, "Invalid type"),
         (REMEMBER_TOOL, {}, CALLER, "'content' is required"),
         (REMEMBER_TOOL, {"content": "x"}, None, "could not be identified"),
+        (RECALL_TOOL, {"query": ""}, CALLER, "'query' is required"),
         ("someOtherTool", {}, CALLER, "Unknown tool"),
     ],
 )
@@ -377,6 +377,20 @@ def test_caller_scope_recall_without_identity_still_returns_shared():
     with TestClient(create_app(caller_memory(fake), secret=SECRET)) as client:
         body = post(client, tool_message(RECALL_TOOL, {"query": "x"}, None)).json()
     assert "content policy" in body["results"][0]["result"]
+
+
+def test_malformed_json_body_is_a_client_error():
+    """A 500 here would make Vapi retry a body that can never be parsed."""
+    with TestClient(create_app(shared_memory(FakeClient()), secret=SECRET)) as client:
+        response = client.post(
+            "/vapi/webhook",
+            content=b"{not json",
+            headers={
+                "Authorization": f"Bearer {SECRET}",
+                "Content-Type": "application/json",
+            },
+        )
+    assert response.status_code == 400
 
 
 def test_expired_session_is_reactivated_once():
@@ -520,6 +534,37 @@ def test_backend_failure_after_call_does_not_fail_webhook(extraction):
     assert "batch_remember" not in fake.names()
 
 
+def test_long_call_leaves_room_for_the_vapi_notes_message(extraction):
+    """The extractor rejects more than 200 messages, notes message included."""
+    _, seen = extraction
+    long_call = [
+        {"role": "user" if i % 2 else "assistant", "content": f"turn {i}"}
+        for i in range(400)
+    ]
+    fake = FakeClient()
+    with TestClient(create_app(shared_memory(fake), secret=SECRET)) as client:
+        post(client, end_of_call(long_call, summary="Long call."))
+
+    messages = seen[0]["messages"]
+    assert len(messages) == 200
+    assert messages[-1]["role"] == "system"
+    assert messages[-1]["content"].startswith("Vapi call summary:")
+    assert messages[0]["content"] == "turn 201"
+
+
+def test_recall_keeps_rows_that_have_no_id():
+    fake = FakeClient()
+    fake.memories = [
+        row("", [], id=None, content="first unnamed"),
+        row("", [], id=None, content="second unnamed"),
+    ]
+    app = create_app(shared_memory(fake), secret=SECRET, assistant_id="asst-1")
+    with TestClient(app) as client:
+        body = post(client, {"type": "assistant-request", "customer": CALLER}).json()
+    context = body["assistantOverrides"]["variableValues"][CONTEXT_VARIABLE]
+    assert "first unnamed" in context and "second unnamed" in context
+
+
 def test_focused_extractor_uses_focus_prompt():
     extractor = memory_module._FocusedExtraction(object(), SHARED_EXTRACTION_FOCUS)
     prompt = extractor._header_prompt(5)
@@ -542,5 +587,8 @@ def test_tool_definitions_match_scope():
     }
     shared_params = shared[1]["function"]["parameters"]
     caller_params = caller[1]["function"]["parameters"]
-    assert "about_caller" not in shared_params["properties"]
-    assert caller_params["required"] == ["content", "about_caller"]
+    for params in (shared_params, caller_params):
+        assert "about_caller" not in params["properties"]
+        assert params["required"] == ["content"]
+    assert "private to this caller" in caller[1]["function"]["description"]
+    assert "shared with all callers" in shared[1]["function"]["description"]

@@ -42,7 +42,6 @@ def tool_definitions(
         },
         "title": {"type": "string", "description": "Optional short label."},
     }
-    required = ["content"]
 
     if scope == "caller":
         recall_description = (
@@ -51,19 +50,11 @@ def tool_definitions(
             "it before asking the caller for details they may already have given."
         )
         remember_description = (
-            "Save something worth remembering on future calls. Set about_caller "
-            "to true for details about this caller (their preferences, promises "
-            "made to them), which stay private to them. Set it to false for "
-            "lessons that apply to every caller, such as a mistake to avoid or a "
-            "better way to answer. Never save secrets, card numbers, or passwords."
+            "Save something about the current caller to remember on their future "
+            "calls, such as a preference they state or a promise made to them. "
+            "It stays private to this caller. Never save secrets, card numbers, "
+            "or passwords."
         )
-        remember_properties["about_caller"] = {
-            "type": "boolean",
-            "description": (
-                "true = private to the current caller; false = shared lesson."
-            ),
-        }
-        required.append("about_caller")
     else:
         recall_description = (
             "Search the agent's memory: organization knowledge and lessons learned "
@@ -103,7 +94,7 @@ def tool_definitions(
                 "parameters": {
                     "type": "object",
                     "properties": remember_properties,
-                    "required": required,
+                    "required": ["content"],
                 },
             },
             "server": server,

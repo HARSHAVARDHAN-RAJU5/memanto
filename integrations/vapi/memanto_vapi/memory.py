@@ -183,6 +183,8 @@ class VapiMemory:
                         description="Vapi voice agent memory (memanto-vapi)",
                     )
                 except AgentAlreadyExistsError:
+                    # Another instance created it between our check and this
+                    # call; that is the outcome we wanted anyway.
                     pass
             self._client.activate_agent(self.agent_id)
             self._ready = True
@@ -311,11 +313,16 @@ class VapiMemory:
                 f"Invalid type '{memory_type}'. Use one of: "
                 + ", ".join(sorted(VALID_MEMORY_TYPES))
             )
+        # In caller scope everything the model saves mid-call is private to the
+        # caller it is talking to. Letting the model mark its own write as
+        # "shared" would let a caller talk their details into every other
+        # caller's context; shared lessons come from end-of-call extraction,
+        # whose prompt forbids caller details.
         private_tag = None
-        if self.scope == "caller" and arguments.get("about_caller") is not False:
+        if self.scope == "caller":
             if tag is None:
                 raise ValueError(
-                    "Cannot save a caller memory: the caller could not be identified"
+                    "Cannot save a memory: the caller could not be identified"
                 )
             private_tag = tag
         title = str(arguments.get("title") or "").strip() or content
@@ -353,7 +360,7 @@ class VapiMemory:
             if m.get("role") in ("user", "assistant")
             and isinstance(m.get("content"), str)
             and m["content"].strip()
-        ][-_MAX_EXTRACT_MESSAGES:]
+        ][-(_MAX_EXTRACT_MESSAGES - 1) :]  # one slot is kept for the notes below
         if not any(m["role"] == "user" for m in conversation):
             logger.info("Call %s has no caller speech; nothing to learn", call_id)
             return
@@ -540,10 +547,15 @@ class VapiMemory:
 
 
 def _merge(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """De-duplicate by id, newest first."""
+    """De-duplicate by id, newest first.
+
+    A row without an id cannot be matched against anything, so it is kept
+    rather than folded into every other id-less row.
+    """
     by_id: dict[str, dict[str, Any]] = {}
-    for memory in memories:
-        by_id.setdefault(str(memory.get("id")), memory)
+    for position, memory in enumerate(memories):
+        key = str(memory.get("id") or f"__no-id-{position}")
+        by_id.setdefault(key, memory)
     return sorted(
         by_id.values(), key=lambda m: str(m.get("created_at") or ""), reverse=True
     )

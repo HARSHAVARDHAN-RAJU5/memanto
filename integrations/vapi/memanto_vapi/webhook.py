@@ -58,7 +58,12 @@ def create_router(
         if not _authorized(authorization, x_vapi_secret):
             raise HTTPException(status_code=401, detail="Invalid Vapi webhook secret")
 
-        body = await request.json()
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="Body is not valid JSON"
+            ) from exc
         message = body.get("message") if isinstance(body, dict) else None
         if not isinstance(message, dict):
             raise HTTPException(status_code=400, detail="Missing 'message' object")

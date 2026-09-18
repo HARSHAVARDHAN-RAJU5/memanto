@@ -36,7 +36,7 @@ About this caller:
 - [commitment] Promised a callback about invoice 4471 (2026-09-15)
 ```
 
-**The server decides whose memories a call can read**, from the caller Vapi reports. The model never passes a caller ID, so a prompt injection cannot reach another caller's memories, and every result is checked again on our side before it is returned.
+**The server decides whose memories a call can read and write**, from the caller Vapi reports. The model never passes a caller ID, so a prompt injection cannot reach another caller's memories, and every result is checked again on our side before it is returned. In caller scope, whatever the agent saves mid-call is private to the caller it is talking to; shared lessons come only from end-of-call extraction, whose prompt excludes caller details.
 
 ## Install and run
 
