@@ -112,9 +112,18 @@ class MemantoStore(BaseStore):
     # nodes) from burning rate-limit budget on identical queries.
     _CACHE_TTL_S = 30.0
 
-    def __init__(self, api_key: str) -> None:
-        """Initialize MemantoStore with an API key."""
+    def __init__(self, api_key: str, *, strict_namespace_binding: bool = False) -> None:
+        """Initialize MemantoStore with an API key.
+
+        Args:
+            api_key: Memanto / Moorcheh API key.
+            strict_namespace_binding: Refuse agents created before namespace
+                binding existed. Such agents have no record of which namespace
+                tuple they belong to, so a colliding tuple could still reach
+                them. Off by default so existing stores keep their memories.
+        """
         self.api_key = api_key
+        self._strict_namespace_binding = strict_namespace_binding
         self._lock = threading.RLock()
         self._key_locks: dict[tuple[tuple[str, ...], str], threading.Lock] = {}
         self._client_pool: dict[str, SdkClient] = {}
@@ -185,8 +194,14 @@ class MemantoStore(BaseStore):
                 )
                 bound = self._bound_namespace(description)
                 # Agents created before the binding existed carry no record of
-                # their namespace; keep serving them so existing memories stay
-                # reachable.
+                # their namespace. By default keep serving them so existing
+                # memories stay reachable; strict mode refuses them instead.
+                if bound is None and self._strict_namespace_binding:
+                    raise ValueError(
+                        f"Memanto agent '{agent_id}' has no namespace binding, so "
+                        f"it cannot be verified to belong to {namespace!r}. "
+                        "Refusing it because strict_namespace_binding is enabled."
+                    )
                 if bound is not None and bound != namespace:
                     raise self._namespace_collision(namespace, agent_id, bound)
             client.activate_agent(agent_id=agent_id)

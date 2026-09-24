@@ -631,6 +631,40 @@ def test_ensure_client_keeps_serving_legacy_unbound_agent(mock_sdk_client):
     assert agent_id == "langgraph_memories_user_123"
 
 
+def test_ensure_client_strict_mode_refuses_legacy_unbound_agent(mock_sdk_client):
+    from memanto.app.utils.errors import AgentAlreadyExistsError
+
+    store = MemantoStore(api_key="test_key", strict_namespace_binding=True)
+    client_instance = MagicMock()
+    mock_sdk_client.return_value = client_instance
+    client_instance.create_agent.side_effect = AgentAlreadyExistsError("exists")
+    client_instance.get_agent.return_value = {
+        "agent_id": "langgraph_memories_user_123",
+        "description": None,
+    }
+
+    with pytest.raises(ValueError, match="no namespace binding"):
+        store._ensure_client(("memories", "user_123"))
+    client_instance.activate_agent.assert_not_called()
+    assert store._client_pool == {}
+
+
+def test_ensure_client_strict_mode_allows_bound_agent(mock_sdk_client):
+    from memanto.app.utils.errors import AgentAlreadyExistsError
+
+    store = MemantoStore(api_key="test_key", strict_namespace_binding=True)
+    client_instance = MagicMock()
+    mock_sdk_client.return_value = client_instance
+    client_instance.create_agent.side_effect = AgentAlreadyExistsError("exists")
+    client_instance.get_agent.return_value = {
+        "agent_id": "langgraph_memories_user_123",
+        "description": 'langgraph-namespace:["memories","user_123"]',
+    }
+
+    _, agent_id = store._ensure_client(("memories", "user_123"))
+    assert agent_id == "langgraph_memories_user_123"
+
+
 def test_do_list_namespaces_uses_bound_namespace(mock_sdk_client):
     store = MemantoStore(api_key="test_key")
     client_instance = MagicMock()

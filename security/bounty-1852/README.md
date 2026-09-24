@@ -110,6 +110,9 @@ tuple, both for existing agents and for the in-process client pool.
 `list_namespaces` now returns the bound tuple, which also fixes the lossy
 `split("_")` round-trip. Agents created before this change have no binding and
 are still served.
+Deployments that would rather fail closed can pass
+`MemantoStore(api_key, strict_namespace_binding=True)`, which refuses those
+unbound agents instead.
 
 ## Tests
 
