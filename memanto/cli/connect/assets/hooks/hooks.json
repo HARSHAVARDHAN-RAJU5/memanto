@@ -1,5 +1,5 @@
 {
-  "description": "MEMANTO: persistent memory for Claude Code. SessionStart refreshes MEMORY.md and installs the status line once, PreCompact re-syncs before compaction, and PostToolUse summarizes manual memory operations.",
+  "description": "MEMANTO: persistent memory for Claude Code. SessionStart refreshes MEMORY.md and installs the status line once, UserPromptSubmit recalls memories relevant to each prompt as hidden context, PreCompact re-syncs before compaction, and PostToolUse summarizes manual memory operations.",
   "hooks": {
     "SessionStart": [
       {
@@ -11,6 +11,19 @@
             "command": "${SYS_EXECUTABLE}",
             "args": ["${HOOKS_DIR}/session_start.py"],
             "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "_managed_by": "memanto",
+            "type": "command",
+            "command": "${SYS_EXECUTABLE}",
+            "args": ["${HOOKS_DIR}/user_prompt_recall.py"],
+            "timeout": 15
           }
         ]
       }

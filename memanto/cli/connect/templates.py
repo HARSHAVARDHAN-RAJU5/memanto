@@ -13,7 +13,7 @@ MEMANTO_SENTINEL_END = "<!-- /MEMANTO-MANAGED-SECTION -->"
 MEMANTO_DYNAMIC_SENTINEL = "<!-- MEMANTO-DYNAMIC-MEMORIES -->"
 MEMANTO_DYNAMIC_SENTINEL_END = "<!-- /MEMANTO-DYNAMIC-MEMORIES -->"
 
-TEMPLATE_VERSION = "1.0.1"
+TEMPLATE_VERSION = "1.0.2"
 MEMANTO_VERSION_TAG = f"<!-- memanto-template-version: {TEMPLATE_VERSION} -->"
 
 
@@ -205,6 +205,8 @@ Before you write any code or provide a final answer, you MUST evaluate if you ne
     - **Step 1:** Invoke {tool_phrase} with the dummy command `echo "memory check"`.
     - **Step 2:** Write your step-by-step evaluation of the triggers inside a `<thinking>` XML tag and place it entirely within the tool call's `explanation` parameter.
     - **Step 3:** If you found matching triggers (like SYNC or RECALL), execute those memory operations in your very next tool calls before proceeding with the user's request.
+
+**Automatic recall:** Some environments run `memanto recall` on the user's message before you see it and add the results to your context under "MEMANTO automatic recall for this prompt". When that block is present, the RECALL triggers below (2-5) are already covered for this turn: use those memories, and run `memanto recall` again only if you need something they don't cover. Still evaluate SYNC and every REMEMBER trigger.
 
 You must actively evaluate:
 1. SYNC (FRESH SESSION / CONTEXT REFRESH): Is this the very first turn of a new session or a shift to a new task?
