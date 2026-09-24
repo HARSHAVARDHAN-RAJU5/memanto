@@ -2,14 +2,19 @@
 MEMANTO CLI - Schedule commands (enable, disable, status).
 """
 
+import time
+
+import typer
 from rich.panel import Panel
 
+from memanto.app.utils.temporal_helpers import utc_date_str
 from memanto.cli.commands._shared import (
     SUCCESS,
     WARNING,
     _error,
     config_manager,
     console,
+    get_client,
     schedule_app,
 )
 from memanto.cli.schedule_manager import ScheduleManager
@@ -17,11 +22,9 @@ from memanto.cli.schedule_manager import ScheduleManager
 
 @schedule_app.command("enable")
 def schedule_enable():
-    """Enable daily AI summary generation at configured time."""
+    """Enable the nightly daily-summary + conflict-detection + expiry-sweep job."""
 
     manager = ScheduleManager()
-
-    # Read configured time, default to 23:55
     configured_time = config_manager.get_schedule_time()
     result = manager.enable(configured_time)
 
@@ -33,7 +36,7 @@ def schedule_enable():
 
 @schedule_app.command("disable")
 def schedule_disable():
-    """Disable auto-generated daily summaries."""
+    """Disable the nightly daily-summary + conflict-detection + expiry-sweep job."""
 
     manager = ScheduleManager()
     result = manager.disable()
@@ -44,9 +47,103 @@ def schedule_disable():
         _error(result.get("message"))
 
 
+@schedule_app.command("_run", hidden=True)
+def schedule_run_internal(
+    date: str | None = typer.Option(None, "--date", "-d"),
+    agent_id: str | None = typer.Option(None, "--agent", "-a"),
+):
+    """Internal entrypoint invoked by the OS scheduler. Runs daily-summary,
+    then detect-conflicts, then the expiry sweep in one process. Not intended
+    for direct use — run ``memanto daily-summary``, ``memanto detect-conflicts``
+    or ``memanto policy apply`` instead.
+    """
+    from memanto.app.clients.backend import Backend
+
+    if config_manager.get_backend() == Backend.ON_PREM:
+        _error(
+            "scheduled job uses the LLM Answer endpoint, which is not "
+            "available on the on-prem backend.",
+            hint="Switch with: memanto config backend cloud",
+        )
+
+    start = time.perf_counter()
+    active_agent_id, _ = config_manager.get_active_session()
+
+    if not agent_id:
+        if not active_agent_id:
+            _error(
+                "No active agent.",
+                hint="Run 'memanto agent activate <agent-id>' first.",
+            )
+        agent_id = active_agent_id
+    if not date:
+        date = utc_date_str()
+
+    client = get_client()
+    failed = False
+
+    try:
+        summary_result = client.generate_daily_summary(agent_id=agent_id, date=date)
+        summary = summary_result.get("summary", {})
+        if summary.get("status") == "success":
+            console.print(
+                f"[green]Daily summary generated:[/green] {summary.get('summary_path')}"
+            )
+        else:
+            failed = True
+            console.print(f"[yellow]! Summary:[/yellow] {summary.get('status')}")
+    except Exception as e:
+        failed = True
+        console.print(f"[red]Daily summary failed: {e}[/red]")
+
+    try:
+        conflict_result = client.generate_conflict_report(agent_id=agent_id, date=date)
+        conflicts = conflict_result.get("conflicts", {})
+        if conflicts.get("status") == "success":
+            count = conflicts.get("conflict_count", 0)
+            console.print(
+                f"[green]Conflict report generated:[/green] "
+                f"{conflicts.get('json_path')} ({count} conflict(s))"
+            )
+        else:
+            failed = True
+            console.print(f"[yellow]! Conflicts:[/yellow] {conflicts.get('status')}")
+    except Exception as e:
+        failed = True
+        console.print(f"[red]Conflict detection failed: {e}[/red]")
+
+    # Expiry sweep. Policies only take effect when a sweep runs, so the nightly
+    # job is what makes "set a policy and forget it" actually work. An agent
+    # with no policy is a no-op, so this is safe to always run.
+    try:
+        report = client.apply_policy(agent_id=agent_id, dry_run=False)
+        if report.get("policy_is_empty"):
+            console.print("[dim]No expiry policy set; nothing swept.[/dim]")
+        else:
+            console.print(
+                f"[green]Expiry sweep:[/green] {report.get('expired', 0)} "
+                f"of {report.get('scanned', 0)} memories expired"
+            )
+        sweep_errors = report.get("errors") or []
+        if sweep_errors:
+            failed = True
+            console.print(
+                f"[yellow]! {len(sweep_errors)} memory/memories failed to expire"
+                "[/yellow]"
+            )
+    except Exception as e:
+        failed = True
+        console.print(f"[red]Expiry sweep failed: {e}[/red]")
+
+    console.print(f"\n[dim]Completed in {time.perf_counter() - start:.2f}s[/dim]")
+
+    if failed:
+        raise typer.Exit(code=1)
+
+
 @schedule_app.command("status")
 def schedule_status():
-    """Check the status of the daily summary schedule."""
+    """Check the status of the scheduled job."""
 
     manager = ScheduleManager()
     result = manager.get_status()
@@ -55,9 +152,9 @@ def schedule_status():
     if result.get("enabled"):
         console.print(
             Panel(
-                f"[green]Daily Summary Automation: ENABLED[/green]\n\n"
+                f"[green]Scheduled Job: ENABLED[/green]\n\n"
                 f"[dim]Time: {configured_time} local time daily[/dim]\n"
-                f"[dim]Command: {manager.python_exe} ... daily-summary[/dim]",
+                f"[dim]Runs: daily-summary && detect-conflicts && policy apply[/dim]",
                 title="Schedule Status",
                 border_style=SUCCESS,
             )
@@ -65,8 +162,9 @@ def schedule_status():
     else:
         console.print(
             Panel(
-                "[yellow]Daily Summary Automation: DISABLED[/yellow]\n\n"
-                "[dim]Run 'memanto schedule enable' to activate automatic summaries.[/dim]",
+                "[yellow]Scheduled Job: DISABLED[/yellow]\n\n"
+                "[dim]Run 'memanto schedule enable' to activate the nightly "
+                "daily-summary + conflict-detection + expiry-sweep job.[/dim]",
                 title="Schedule Status",
                 border_style=WARNING,
             )

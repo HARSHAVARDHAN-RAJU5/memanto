@@ -1,0 +1,518 @@
+"""
+Daily Analysis Service
+
+Aggregates session MD files for a specific day and produces two outputs:
+the AI daily summary and the conflict report.
+"""
+
+import json
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, cast
+
+from memanto.app.clients.agent_conflict import detect_conflicts_via_agent
+from memanto.app.clients.backend import (
+    Backend,
+    get_active_embedding_model,
+    get_active_llm_model,
+    parse_backend,
+)
+from memanto.app.clients.moorcheh import get_moorcheh_client
+from memanto.app.config import get_data_dir, settings
+from memanto.app.core import agent_namespace
+from memanto.app.services.session_service import get_session_service
+from memanto.app.utils.errors import MemoryOperationError
+from memanto.app.utils.temporal_helpers import (
+    format_current_local_time,
+    format_local_time,
+)
+from memanto.app.utils.validation import validate_output_path, validate_safe_id
+
+# Context window of the embedding models Memanto targets. The query budget sits
+# below it so the retrieval query still fits after the backend adds its own
+# framing. Asserted against in tests/test_daily_summary_query_length.py.
+_EMBEDDING_CONTEXT_TOKENS = 2_048
+_EMBEDDING_QUERY_TOKEN_BUDGET = 1_800
+
+
+@lru_cache(maxsize=8)
+def _get_embedding_tokenizer(model: str | None) -> Any | None:
+    """Load the active model's tokenizer without adding a hard dependency.
+
+    ``tiktoken`` is used only when it is already installed and recognizes the
+    configured model. Unknown and server-managed models fall back to the
+    byte-bound path below; this function never downloads tokenizer assets.
+    """
+    if not model:
+        return None
+    try:
+        import tiktoken  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        return tiktoken.encoding_for_model(model)
+    except KeyError:
+        return None
+
+
+def _truncate_embedding_query(
+    text: str,
+    *,
+    model: str | None,
+    token_budget: int = _EMBEDDING_QUERY_TOKEN_BUDGET,
+) -> str:
+    """Fit text within the embedding budget using a bounded digest covering the complete text evenly."""
+    tokenizer = _get_embedding_tokenizer(model)
+    if tokenizer is not None:
+        # disallowed_special=() treats tokens like "<|endoftext|>" as ordinary
+        # text. Session content is arbitrary user prose, and tiktoken's default
+        # raises ValueError on those markers -- here that would escape before
+        # generate_summary's try/except turns failures into MemoryOperationError.
+        token_ids = tokenizer.encode(text, disallowed_special=())
+        if len(token_ids) <= token_budget:
+            return text
+
+        num_chunks = 10
+        chunk_budget = token_budget // num_chunks
+        max_start = max(0, len(token_ids) - chunk_budget)
+
+        digest_ids = []
+        for i in range(num_chunks):
+            start = (i * max_start) // (num_chunks - 1) if num_chunks > 1 else 0
+            digest_ids.extend(token_ids[start : start + chunk_budget])
+
+        # tiktoken's decode gracefully handles partial BPE bytes
+        return str(tokenizer.decode(digest_ids, errors="ignore"))
+
+    # Byte-level BPE and SentencePiece token counts cannot exceed the number
+    # of UTF-8 bytes in their input. Limiting bytes is conservative for normal
+    # prose and also bounds dense Unicode when the backend tokenizer is hidden.
+    encoded = text.encode("utf-8")
+    if len(encoded) <= token_budget:
+        return text
+
+    num_chunks = 10
+    chunk_budget = token_budget // num_chunks
+    stride = max(1, len(encoded) // num_chunks)
+
+    digest_bytes = bytearray()
+    for i in range(num_chunks):
+        start = i * stride
+        digest_bytes.extend(encoded[start : start + chunk_budget])
+
+    return digest_bytes.decode("utf-8", errors="ignore")
+
+
+class DailyAnalysisService:
+    """Service for analyzing a day's session MD files — generates the
+    daily AI summary and the conflict report.
+    """
+
+    def __init__(
+        self,
+        sessions_dir: Path | None = None,
+        summaries_dir: Path | None = None,
+    ):
+        """
+        Initialize the daily analysis service.
+
+        Args:
+            sessions_dir: Directory where session MD files are stored
+            summaries_dir: Directory where generated summaries will be saved
+        """
+        self.session_service = get_session_service()
+        self.sessions_dir = sessions_dir or self.session_service.sessions_dir
+        self.summaries_dir = summaries_dir or get_data_dir() / "summaries"
+        self.summaries_dir.mkdir(parents=True, exist_ok=True)
+
+    def generate_summary(
+        self, agent_id: str, date: str, output_path: str | None = None
+    ) -> dict[str, Any]:
+        """
+        Generate a daily natural language summary for an agent and date.
+        """
+        validate_safe_id(agent_id, "agent_id")
+        validate_safe_id(date, "date")
+        # Validate output_path before any I/O so traversal attempts fail fast.
+        resolved_output = validate_output_path(
+            output_path,
+            base_dir=self.summaries_dir.parent,
+        )
+        # Find all relevant session MD files
+        pattern = f"{agent_id}_{date}_*_summary.md"
+        session_files = list(self.sessions_dir.glob(pattern))
+
+        if not session_files:
+            return {"status": "no_sessions"}
+
+        combined_content = []
+        for file_path in session_files:
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    combined_content.append(f.read())
+            except Exception as e:
+                print(f"Error reading {file_path}: {e}")
+
+        if not combined_content:
+            return {"status": "empty_sessions"}
+
+        full_text = "\n\n---\n\n".join(combined_content)
+
+        client = get_moorcheh_client()
+        namespace = agent_namespace(agent_id)
+
+        retrieval_query = _truncate_embedding_query(
+            full_text,
+            model=get_active_embedding_model(),
+        )
+
+        header_prompt = f"""
+Summarize the following session memories from {date} into a concise natural language daily summary.
+Focus on key themes, accomplishments, and high-level activities.
+
+Sessions Content:
+{retrieval_query}
+"""
+
+        footer_prompt = f"""
+Format the output as a Markdown report:
+# Daily Summary for {agent_id} - {date}
+**Generated at:** {format_current_local_time()}
+
+## Executive Summary
+...
+## Key Themes & Activities
+...
+"""
+        try:
+            generate_kwargs: dict[str, Any] = {
+                "namespace": namespace,
+                "query": retrieval_query,
+                "top_k": 50,
+                "header_prompt": header_prompt,
+                "footer_prompt": footer_prompt,
+            }
+            ai_model = get_active_llm_model(settings.SUMMARY_MODEL)
+            if ai_model is not None:
+                generate_kwargs["ai_model"] = ai_model
+            result = client.answer.generate(**generate_kwargs)
+            summary_text = result.get("answer", "Failed to generate summary.")
+        except Exception as e:
+            raise MemoryOperationError(f"AI summarization failed: {str(e)}")
+
+        if resolved_output is not None:
+            resolved_output.parent.mkdir(parents=True, exist_ok=True)
+            summary_path = resolved_output
+        else:
+            summary_path = self.summaries_dir / f"{agent_id}_{date}.md"
+
+        with open(summary_path, "w", encoding="utf-8") as f:
+            f.write(summary_text)
+
+        # Append visual insights (timeline, type distribution, confidence)
+        try:
+            from memanto.app.services.summary_visualization_service import (
+                SummaryVisualizationService,
+            )
+
+            viz_service = SummaryVisualizationService()
+            viz_service.append_visualizations_to_summary(
+                agent_id=agent_id,
+                date=date,
+                summary_path=summary_path,
+                sessions_dir=self.sessions_dir,
+            )
+        except Exception as e:
+            print(f"Warning: Failed to append visualizations: {e}")
+
+        return {
+            "status": "success",
+            "summary_path": str(summary_path),
+            "sessions_count": len(session_files),
+            "agent_id": agent_id,
+            "date": date,
+        }
+
+    def _enrich_conflict_metadata(
+        self,
+        client: Any,
+        namespace: str,
+        conflicts_data: list[dict[str, Any]],
+    ) -> None:
+        """Attach created_at/source fields by fetching document metadata."""
+        for item in conflicts_data:
+            item.setdefault("resolved", False)
+            item.setdefault("resolution", None)
+
+            for prefix in ["old", "new"]:
+                mem_id = item.get(f"{prefix}_memory_id")
+                item[f"{prefix}_created_at"] = None
+                item[f"{prefix}_source"] = "unknown"
+
+                if not mem_id or mem_id == "candidate":
+                    continue
+                try:
+                    doc_result = client.documents.get(
+                        namespace_name=namespace, ids=[mem_id]
+                    )
+                    doc_dict = cast(dict[str, Any], doc_result)
+                    if doc_dict and doc_dict.get("items"):
+                        doc = doc_dict["items"][0]
+                        metadata = doc.get("metadata") or {}
+                        created_at = metadata.get("created_at") or doc.get("created_at")
+                        source = (
+                            metadata.get("source") or doc.get("source") or "unknown"
+                        )
+                        item[f"{prefix}_created_at"] = format_local_time(created_at)
+                        item[f"{prefix}_source"] = source
+                except Exception as e:
+                    print(f"Note: Could not fetch metadata for memory {mem_id}: {e}")
+
+    def _normalize_agent_conflicts(
+        self, report: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Map Moorche agent conflict report items to Memanto conflict schema."""
+        raw_conflicts = report.get("conflicts") or []
+        if not isinstance(raw_conflicts, list):
+            raise ValueError("Agent conflict report conflicts field must be a list")
+
+        normalized: list[dict[str, Any]] = []
+        for item in raw_conflicts:
+            if not isinstance(item, dict):
+                continue
+            if item.get("conflict") is False:
+                continue
+
+            old_id = item.get("old_memory_id")
+            new_id = item.get("new_memory_id")
+            if old_id and new_id and old_id == new_id:
+                continue
+
+            conflict_type = item.get("type") or "conflict"
+            if conflict_type in ("compatible", "duplicate"):
+                continue
+            if conflict_type != "contradiction" and item.get("conflict") is not True:
+                continue
+
+            recommendation = item.get("recommendation") or "keep_new"
+            if recommendation == "keep_both":
+                recommendation = "merge"
+
+            normalized.append(
+                {
+                    "type": conflict_type,
+                    "title": item.get("title") or "Memory conflict",
+                    "old_memory_id": old_id,
+                    "old_content": item.get("old_text") or item.get("old_content"),
+                    "new_memory_id": new_id if new_id != "candidate" else None,
+                    "new_content": item.get("new_text") or item.get("new_content"),
+                    "description": item.get("reason") or item.get("description"),
+                    "recommendation": recommendation,
+                    "resolved": False,
+                    "resolution": None,
+                }
+            )
+        return normalized
+
+    def _save_conflict_report(
+        self, agent_id: str, date: str, conflicts_data: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        from memanto.app.config import get_conflicts_dir
+
+        conflicts_dir = get_conflicts_dir()
+        json_path = conflicts_dir / f"{agent_id}_{date}_conflicts.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(conflicts_data, f, indent=2, default=str)
+
+        return {
+            "status": "success",
+            "json_path": str(json_path),
+            "conflict_count": len(conflicts_data),
+        }
+
+    def _generate_conflict_report_via_agent(
+        self,
+        agent_id: str,
+        date: str,
+        namespace: str,
+        client: Any,
+        on_progress=None,
+        cancel_event=None,
+    ) -> dict[str, Any]:
+        ai_model = get_active_llm_model(settings.SUMMARY_MODEL)
+        generate_kwargs: dict[str, Any] = {
+            "base_url": client.base_url,
+            "api_key": client.api_key,
+            "namespace": namespace,
+            "date": date,
+            "memory_types": ["fact", "preference"],
+        }
+        if ai_model is not None:
+            generate_kwargs["ai_model"] = ai_model
+
+        if on_progress is not None:
+            generate_kwargs["on_event"] = on_progress
+        if cancel_event is not None:
+            generate_kwargs["cancel_event"] = cancel_event
+
+        try:
+            report = detect_conflicts_via_agent(**generate_kwargs)
+        except Exception as e:
+            raise MemoryOperationError(f"Conflict detection failed: {str(e)}") from e
+
+        try:
+            conflicts_data = self._normalize_agent_conflicts(report)
+        except ValueError as e:
+            raise MemoryOperationError(f"Conflict detection failed: {str(e)}") from e
+
+        self._enrich_conflict_metadata(client, namespace, conflicts_data)
+        return self._save_conflict_report(agent_id, date, conflicts_data)
+
+    def _generate_conflict_report_legacy(
+        self,
+        agent_id: str,
+        date: str,
+        namespace: str,
+        client: Any,
+        full_text: str,
+    ) -> dict[str, Any]:
+        query_digest = _truncate_embedding_query(
+            full_text,
+            model=get_active_embedding_model(),
+        )
+
+        header_prompt = f"""Analyze the following session memories from {date} against historical knowledge for this agent.
+
+CRITICAL INSTRUCTIONS:
+1. ONLY report conflicts, contradictions, updates, or duplicates that involve AT LEAST ONE of the memories from the "Recent Sessions Content" provided below.
+2. DO NOT report conflicts that exist solely between two or more historical memories (Old vs Old). We are only interested in how the NEW data interacts with existing knowledge.
+3. If a new memory replaces an old one, clearly identify which is which.
+4. NEVER report a conflict where the old_memory_id and new_memory_id are THE SAME. If both IDs match, that is the same memory retrieved from the knowledge base — skip it entirely.
+
+Identify:
+1. Contradictions: New info contradicting old facts.
+2. Updates: Improvements or changes to existing knowledge provided by new memories.
+3. Duplicates: New memories that are redundant with historical ones.
+4. Conflicts: Semantic disagreements between new and historical memories.
+
+Recent Sessions Content:
+{query_digest}"""
+
+        footer_prompt = """You MUST respond with ONLY a valid JSON array. No markdown, no explanation, no code fences.
+Each element must be an object with these exact keys:
+- "type": one of "contradiction", "update", "duplicate", "conflict"
+- "title": short description of the issue
+- "old_memory_id": the ID of the historical/old memory (or null if unknown)
+- "old_content": a brief summary of what the old memory says
+- "new_memory_id": the ID of the new/recent memory (or null if unknown)
+- "new_content": a brief summary of what the new memory says
+- "description": detailed explanation of the conflict
+- "recommendation": one of "keep_new", "keep_old", "merge", "remove_both"
+
+If there are NO conflicts, return an empty array: []
+
+Example response format:
+[{"type": "contradiction", "title": "Database preference changed", "old_memory_id": "abc-123", "old_content": "We use PostgreSQL", "new_memory_id": "def-456", "new_content": "We migrated to MongoDB", "description": "New memory contradicts old database preference", "recommendation": "keep_new"}]"""
+
+        try:
+            generate_kwargs = {
+                "namespace": namespace,
+                "query": query_digest,
+                "top_k": 50,
+                "header_prompt": header_prompt,
+                "footer_prompt": footer_prompt,
+            }
+            ai_model = get_active_llm_model(settings.SUMMARY_MODEL)
+            if ai_model is not None:
+                generate_kwargs["ai_model"] = ai_model
+            result = client.answer.generate(**generate_kwargs)
+            conflict_text = result.get("answer", "[]")
+        except Exception as e:
+            raise MemoryOperationError(f"Conflict detection failed: {str(e)}") from e
+
+        conflicts_data: list[dict[str, Any]] = []
+        try:
+            clean_text = conflict_text.strip()
+            if clean_text.startswith("```"):
+                clean_text = (
+                    clean_text.split("\n", 1)[1]
+                    if "\n" in clean_text
+                    else clean_text[3:]
+                )
+            if clean_text.endswith("```"):
+                clean_text = clean_text[:-3].strip()
+
+            parsed = json.loads(clean_text)
+            if not isinstance(parsed, list) or not all(
+                isinstance(item, dict) for item in parsed
+            ):
+                raise ValueError(
+                    "AI response parsed as JSON but is not a list of objects"
+                )
+
+            parsed = [
+                item
+                for item in parsed
+                if not (
+                    item.get("old_memory_id")
+                    and item.get("new_memory_id")
+                    and item["old_memory_id"] == item["new_memory_id"]
+                )
+            ]
+            self._enrich_conflict_metadata(client, namespace, parsed)
+            conflicts_data = parsed
+        except (json.JSONDecodeError, ValueError):
+            if conflict_text.strip() and conflict_text.strip() != "[]":
+                conflicts_data = [
+                    {
+                        "type": "conflict",
+                        "title": "Unparsed conflict report",
+                        "old_memory_id": None,
+                        "old_content": None,
+                        "new_memory_id": None,
+                        "new_content": None,
+                        "description": conflict_text,
+                        "recommendation": "merge",
+                        "resolved": False,
+                        "resolution": None,
+                    }
+                ]
+
+        return self._save_conflict_report(agent_id, date, conflicts_data)
+
+    def generate_conflict_report(
+        self, agent_id: str, date: str, on_progress=None, cancel_event=None
+    ) -> dict[str, Any]:
+        """
+        Generate a structured conflict report (Contradictions, Conflicts, Updates, Duplicates).
+        """
+        validate_safe_id(agent_id, "agent_id")
+        validate_safe_id(date, "date")
+
+        client = get_moorcheh_client()
+        namespace = agent_namespace(agent_id)
+
+        if parse_backend(settings.MEMANTO_BACKEND) == Backend.CLOUD:
+            return self._generate_conflict_report_via_agent(
+                agent_id,
+                date,
+                namespace,
+                client,
+                on_progress=on_progress,
+                cancel_event=cancel_event,
+            )
+
+        pattern = f"{agent_id}_{date}_*_summary.md"
+        session_files = list(self.sessions_dir.glob(pattern))
+
+        if not session_files:
+            return {"status": "no_sessions"}
+
+        combined_content = []
+        for file_path in session_files:
+            with open(file_path, encoding="utf-8") as f:
+                combined_content.append(f.read())
+        full_text = "\n\n---\n\n".join(combined_content)
+        return self._generate_conflict_report_legacy(
+            agent_id, date, namespace, client, full_text
+        )

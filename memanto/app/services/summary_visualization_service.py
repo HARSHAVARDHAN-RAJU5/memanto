@@ -46,6 +46,16 @@ class SummaryVisualizationService:
             Markdown string with visual insights (may be empty if no data).
         """
         memories = self._parse_session_files(agent_id, date, sessions_dir)
+        return self.build_visualization_markdown(memories)
+
+    def build_visualization_markdown(self, memories: list[dict]) -> str:
+        """
+        Build the full "Visual Insights" Markdown block from a list of memory
+        records (``{timestamp, type, title, confidence}``).
+
+        Shared by the per-day daily-summary path and aggregate metrics export.
+        Returns an empty string when there are no memories.
+        """
         if not memories:
             return ""
 
@@ -128,7 +138,6 @@ class SummaryVisualizationService:
                 continue
 
             headings = list(self._HEADING_RE.finditer(text))
-            confidences = list(self._CONFIDENCE_RE.finditer(text))
 
             for i, match in enumerate(headings):
                 ts_str, mem_type, title = match.groups()
@@ -137,11 +146,17 @@ class SummaryVisualizationService:
                 except ValueError:
                     continue
 
-                # Try to pair with the nearest confidence value
+                # Pair confidence with the current memory block only.
                 conf = 0.8  # default
-                if i < len(confidences):
+                block_end = (
+                    headings[i + 1].start() if i + 1 < len(headings) else len(text)
+                )
+                confidence_match = self._CONFIDENCE_RE.search(
+                    text, match.end(), block_end
+                )
+                if confidence_match:
                     try:
-                        conf = float(confidences[i].group(1))
+                        conf = float(confidence_match.group(1))
                     except (ValueError, IndexError):
                         pass
 

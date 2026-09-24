@@ -1,6 +1,49 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True, scope="function")
+def cleanup_test_sessions():
+    """Clean up test-agent and test sessions after each test to prevent pollution."""
+    yield
+    # After test completes, remove test session files from ~/.memanto/sessions/
+    sessions_dir = Path.home() / ".memanto" / "sessions"
+    if sessions_dir.exists():
+        for agent_id in ["test-agent", "test"]:
+            session_file = sessions_dir / f"{agent_id}.json"
+            if session_file.exists():
+                session_file.unlink()
+        # If active marker points to a non-existent agent, clear it
+        active_marker = sessions_dir / "active"
+        if active_marker.exists():
+            try:
+                content = active_marker.read_text().strip()
+                if (
+                    content in ["test-agent", "test"]
+                    or not (sessions_dir / f"{content}.json").exists()
+                ):
+                    active_marker.unlink()
+            except Exception:
+                pass
+
+
+@pytest.fixture(autouse=True)
+def reset_client_identity():
+    """Clear the bound calling tool between tests.
+
+    ``memanto recall --tool X`` binds a ContextVar and never resets it - correct
+    for a CLI process that is about to exit, but inside pytest one test's
+    ``--tool`` would otherwise decide the attribution of every test after it.
+    """
+    from memanto.app.utils.client_identity import set_client, set_memanto_session
+
+    set_client(None)
+    set_memanto_session(None)
+    yield
+    set_client(None)
+    set_memanto_session(None)
 
 
 @pytest.fixture(autouse=True)
@@ -9,6 +52,22 @@ def reset_auto_parse(monkeypatch):
     from memanto.app.config import settings
 
     monkeypatch.setattr(settings, "AUTO_PARSE_ENABLED", True)
+
+
+@pytest.fixture(autouse=True)
+def reset_session_toggles(monkeypatch):
+    """Pin the session toggles to their defaults for every test.
+
+    ``memanto.app.config`` overlays ``~/.memanto/config.yaml`` onto ``settings``
+    at import time, so a developer who has switched auto-renew or auto-recreate
+    off locally would otherwise change how the suite behaves. Tests that
+    exercise the disabled path override this with their own ``patch.object``.
+    The overlay itself is covered in ``tests/test_session_config_overlay.py``.
+    """
+    from memanto.app.config import settings
+
+    monkeypatch.setattr(settings, "SESSION_AUTO_RENEW_ENABLED", True)
+    monkeypatch.setattr(settings, "SESSION_AUTO_RECREATE_ENABLED", True)
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +103,13 @@ def mock_moorcheh_for_tests():
     mock_instance = MagicMock()
     mock_instance.namespaces.create.return_value = {"status": "created"}
     mock_instance.namespaces.list.return_value = {"namespaces": []}
+    mock_instance.documents.upload.return_value = {"status": "queued"}
+    mock_instance.documents.upload_file.return_value = {
+        "success": True,
+        "fileSize": 0,
+        "message": "",
+    }
+    mock_instance.answer.generate.return_value = {"answer": "", "sources": []}
 
     with (
         patch(

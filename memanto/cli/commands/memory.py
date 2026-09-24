@@ -1,29 +1,89 @@
 """
-MEMANTO CLI - Memory commands (remember, recall, answer, daily-summary, conflicts).
+MEMANTO CLI - Memory commands (remember, recall, answer, daily-summary,
+detect-conflicts, conflicts).
 """
 
 import json
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import typer
+from rich.live import Live
 from rich.panel import Panel
+from rich.text import Text
 
+from memanto.app.clients.agent_conflict import describe_conflict_progress
+from memanto.app.constants import SourceType
+from memanto.app.core import is_valid_source
+from memanto.app.utils.client_identity import (
+    client_from_tool,
+    detect_client,
+    set_client,
+)
+from memanto.app.utils.temporal_helpers import get_yesterday_range, utc_date_str
 from memanto.cli.commands._shared import (
     BOLD_PRIMARY,
     BRIGHT,
     DIM,
     PRIMARY,
     SUCCESS,
+    WARNING,
     _error,
     app,
     config_manager,
     console,
     format_local_time,
     get_client,
+    memory_app,
     parse_relative_time,
 )
+
+
+def _as_float(value: object, default: float = 0.0) -> float:
+    """Coerce API display fields to float without crashing CLI rendering."""
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+# Agent-facing: an AI tool naming itself is exact, where sniffing the
+# environment is a guess that fails entirely for tools that leave no marker.
+# Hidden because a human running `memanto` by hand has nothing to declare.
+_TOOL_OPTION = typer.Option(
+    None,
+    "--tool",
+    hidden=True,
+    help="Slug of the AI tool making this call (e.g. claude-code, cursor).",
+)
+
+
+# `--source` values that name a person rather than a tool. A memory dictated
+# by a human is still made by some tool, so these fall through to environment
+# detection instead of putting "user" on the connected-tools diagram.
+_NON_TOOL_SOURCES = frozenset({"user", "agent", "human"})
+
+
+def _tool_from_source(source: str | None) -> str | None:
+    """Read the calling tool off `remember --source`, when it names one."""
+    if source and source.strip().lower() not in _NON_TOOL_SOURCES:
+        return source
+    return None
+
+
+def _bind_calling_tool(tool: str | None) -> None:
+    """Attribute this invocation to the tool that named itself, if any."""
+    if tool:
+        set_client(client_from_tool(tool))
 
 
 @app.command()
@@ -42,8 +102,12 @@ def remember(
         0.8, "--confidence", "-c", help="Confidence score (0.0-1.0)"
     ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
-    source: str = typer.Option(
-        "user", "--source", "-s", help="Source of the memory (e.g., user, agent_name)"
+    source: str | None = typer.Option(
+        None,
+        "--source",
+        "-s",
+        help="Who wrote the memory. Defaults to the detected calling tool "
+        "(e.g. claude-code, cursor), or 'user' when no tool is identified.",
     ),
     provenance: str = typer.Option(
         "explicit_statement",
@@ -54,12 +118,35 @@ def remember(
     batch: str | None = typer.Option(
         None, "--batch", help="Path to JSON file with batch memories (array of objects)"
     ),
+    from_conversation: str | None = typer.Option(
+        None,
+        "--from-conversation",
+        help="Path to JSON conversation messages, or '-' to read from stdin",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview extracted conversation memories without storing them",
+    ),
+    max_memories: int = typer.Option(
+        20,
+        "--max-memories",
+        help="Maximum memories to extract from a conversation",
+    ),
+    ai_model: str | None = typer.Option(
+        None,
+        "--ai-model",
+        help="Optional model override for conversation extraction",
+    ),
 ):
     """Store a new memory for the active agent.
 
     Single memory:  memanto remember "some fact"
     Batch mode:     memanto remember --batch memories.json
     """
+    # `--source` already names the writer, so it doubles as the caller's
+    # identity here - no second flag. Bind before the batch path returns.
+    _bind_calling_tool(_tool_from_source(source))
     start = time.perf_counter()
     active_agent_id, active_session_token = config_manager.get_active_session()
 
@@ -71,8 +158,86 @@ def remember(
     client = get_client()
     agent_id = active_agent_id
 
+    # Conversation extraction mode
+    if from_conversation:
+        if batch or content:
+            _error(
+                "--from-conversation cannot be combined with CONTENT or --batch.",
+                hint="Use one input mode at a time.",
+            )
+        if max_memories < 1 or max_memories > 100:
+            _error("--max-memories must be between 1 and 100.")
+
+        try:
+            if from_conversation == "-":
+                raw = sys.stdin.read()
+            else:
+                conversation_path = Path(from_conversation)
+                if not conversation_path.exists():
+                    _error(
+                        f"File not found: {from_conversation}",
+                        hint="Provide a valid path to a JSON file.",
+                    )
+                raw = conversation_path.read_text(encoding="utf-8")
+            messages = json.loads(raw)
+        except json.JSONDecodeError as e:
+            _error(
+                f"Invalid JSON: {e}",
+                hint="Conversation file must contain an array of {role, content} objects.",
+            )
+
+        if not isinstance(messages, list):
+            _error("Conversation JSON must contain an array of message objects.")
+
+        try:
+            with console.status(
+                "[cyan]Extracting memories from conversation...", spinner="dots"
+            ):
+                result = client.extract_memories_from_conversation(
+                    agent_id=agent_id,
+                    messages=messages,
+                    dry_run=dry_run,
+                    max_memories=max_memories,
+                    ai_model=ai_model,
+                )
+            elapsed = time.perf_counter() - start
+            candidates = result.get("candidates", [])
+
+            if dry_run:
+                console.print(
+                    f"[yellow]Dry run:[/yellow] extracted {len(candidates)} memory candidate(s)."
+                )
+            else:
+                successful = result.get("successful", 0)
+                failed = result.get("failed", 0)
+                total = result.get("total_submitted", len(candidates))
+                console.print(
+                    f"[green]Stored {successful}/{total} extracted memories[/green]"
+                    + (f" [yellow]({failed} failed)[/yellow]" if failed else "")
+                )
+
+            for i, item in enumerate(candidates, 1):
+                console.print(
+                    Panel(
+                        f"[bold]{item.get('title', 'Untitled')}[/bold]\n\n"
+                        f"{item.get('content', '')}\n\n"
+                        f"[dim]Type: {item.get('type', 'fact')} | "
+                        f"Confidence: {_as_float(item.get('confidence'), 0.8):.2f}[/dim]",
+                        title=f"Candidate {i}",
+                        border_style="yellow" if dry_run else SUCCESS,
+                    )
+                )
+            console.print(f"[dim]Completed in {elapsed:.2f}s[/dim]")
+        except Exception as e:
+            _error(f"Failed to extract memories: {e}")
+
+        return
+
     # Batch mode
     if batch:
+        if dry_run:
+            _error("--dry-run is only supported with --from-conversation.")
+
         batch_path = Path(batch)
         if not batch_path.exists():
             _error(
@@ -147,16 +312,30 @@ def remember(
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
 
+    # An explicit --source always wins. Otherwise attribute the write to the
+    # tool that ran this command, so the Connections view can show which agent
+    # produced which memory; a bare terminal stays "user".
+    if source is None:
+        detected = detect_client()
+        source = detected.tool if detected.is_known else "user"
+
+    if not is_valid_source(source):
+        _error(
+            f"Invalid source: '{source}'.",
+            hint="A source names who wrote the memory (e.g. user, agent, cursor, "
+            "codex, claude_code). Use up to 64 letters, digits, '.', '_', or '-'.",
+        )
+
     try:
         with console.status("[cyan]Storing memory...", spinner="dots"):
             result = client.remember(
                 agent_id=agent_id,
                 memory_type=memory_type,
-                title=title or content[:50] + "..." if len(content) > 50 else content,
+                title=title or (content[:50] + "..." if len(content) > 50 else content),
                 content=content,
                 confidence=confidence,
                 tags=tag_list,
-                source=source,
+                source=cast(SourceType, source),
                 provenance=provenance,
             )
         elapsed = time.perf_counter() - start
@@ -172,6 +351,199 @@ def remember(
 
 
 @app.command()
+def edit(
+    memory_id: str = typer.Argument(..., help="Memory ID to update"),
+    title: str | None = typer.Option(None, "--title", help="New memory title"),
+    content: str | None = typer.Option(None, "--content", help="New memory content"),
+    memory_type: str | None = typer.Option(
+        None, "--type", "-t", help="New memory type"
+    ),
+    confidence: float | None = typer.Option(
+        None, "--confidence", "-c", help="New confidence score (0.0-1.0)"
+    ),
+    tags: str | None = typer.Option(None, "--tags", help="New comma-separated tags"),
+    source: str | None = typer.Option(None, "--source", "-s", help="New memory source"),
+):
+    """Update fields on an existing memory for the active agent."""
+    start = time.perf_counter()
+    active_agent_id, active_session_token = config_manager.get_active_session()
+
+    if not active_agent_id or not active_session_token:
+        _error(
+            "No active agent.", hint="Run 'memanto agent activate <agent-id>' first."
+        )
+
+    updates: dict[str, object] = {}
+    if title is not None:
+        updates["title"] = title
+    if content is not None:
+        updates["content"] = content
+    if memory_type is not None:
+        updates["type"] = memory_type
+    if confidence is not None:
+        updates["confidence"] = confidence
+    if tags is not None:
+        updates["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
+    if source is not None:
+        updates["source"] = source
+
+    if not updates:
+        _error(
+            "No update fields provided.",
+            hint="Pass at least one of: --title, --content, --type, --confidence, --tags, --source.",
+        )
+
+    client = get_client()
+
+    try:
+        with console.status("[cyan]Updating memory...", spinner="dots"):
+            result = client.update_memory(
+                agent_id=active_agent_id,
+                memory_id=memory_id,
+                updates=updates,
+            )
+        elapsed = time.perf_counter() - start
+
+        updated_fields = ", ".join(result.get("updated_fields", updates.keys()))
+        console.print("[green]Memory updated successfully![/green]")
+        console.print(f"[dim]Memory ID: {result.get('memory_id', memory_id)}[/dim]")
+        console.print(f"[dim]Updated fields: {updated_fields}[/dim]")
+        console.print(f"[dim]Completed in {elapsed:.2f}s[/dim]")
+
+    except Exception as e:
+        _error(f"Failed to update memory: {e}")
+
+
+@memory_app.command("expire")
+def memory_expire(
+    memory_id: str = typer.Argument(..., help="Memory ID to expire"),
+    reason: str = typer.Option(
+        "manual",
+        "--reason",
+        "-r",
+        help="Why it expired, stamped as expired_by (default 'manual')",
+    ),
+):
+    """Expire a memory without deleting it.
+
+    The memory keeps its content and still appears in recall, labelled
+    [EXPIRED]. Reverse it with 'memanto memory restore <id>'.
+
+    Examples:
+        memanto memory expire mem-123
+        memanto memory expire mem-123 --reason superseded-by-rewrite
+    """
+    start = time.perf_counter()
+    active_agent_id, active_session_token = config_manager.get_active_session()
+
+    if not active_agent_id or not active_session_token:
+        _error(
+            "No active agent.", hint="Run 'memanto agent activate <agent-id>' first."
+        )
+
+    client = get_client()
+
+    try:
+        with console.status(f"[{PRIMARY}]Expiring memory...", spinner="dots"):
+            result = client.expire_memory(
+                agent_id=active_agent_id, memory_id=memory_id, reason=reason
+            )
+        elapsed = time.perf_counter() - start
+
+        console.print(f"[{WARNING}]Memory expired.[/{WARNING}]")
+        console.print(f"[dim]Memory ID: {memory_id}[/dim]")
+        console.print(f"[dim]Reason: {result.get('expired_by', reason)}[/dim]")
+        console.print(
+            "[dim]Still recallable and labelled [EXPIRED]. "
+            f"Restore with 'memanto memory restore {memory_id}'.[/dim]"
+        )
+        console.print(f"[dim]Completed in {elapsed:.2f}s[/dim]")
+
+    except Exception as e:
+        _error(f"Failed to expire memory: {e}")
+
+
+@memory_app.command("restore")
+def memory_restore(
+    memory_id: str = typer.Argument(..., help="Memory ID to restore"),
+):
+    """Return an expired memory to the active state.
+
+    Examples:
+        memanto memory restore mem-123
+    """
+    start = time.perf_counter()
+    active_agent_id, active_session_token = config_manager.get_active_session()
+
+    if not active_agent_id or not active_session_token:
+        _error(
+            "No active agent.", hint="Run 'memanto agent activate <agent-id>' first."
+        )
+
+    client = get_client()
+
+    try:
+        with console.status(f"[{PRIMARY}]Restoring memory...", spinner="dots"):
+            client.restore_memory(agent_id=active_agent_id, memory_id=memory_id)
+        elapsed = time.perf_counter() - start
+
+        console.print(f"[{SUCCESS}]Memory restored to active.[/{SUCCESS}]")
+        console.print(f"[dim]Memory ID: {memory_id}[/dim]")
+        console.print(f"[dim]Completed in {elapsed:.2f}s[/dim]")
+
+    except Exception as e:
+        _error(f"Failed to restore memory: {e}")
+
+
+@app.command()
+def forget(
+    memory_id: str = typer.Argument(..., help="Memory ID to delete"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Delete without asking for confirmation",
+    ),
+):
+    """Permanently delete a single memory from the active agent.
+
+    This cannot be undone. To retire a memory reversibly, use
+    'memanto memory expire <id>' instead.
+    """
+    start = time.perf_counter()
+    active_agent_id, active_session_token = config_manager.get_active_session()
+
+    if not active_agent_id or not active_session_token:
+        _error(
+            "No active agent.", hint="Run 'memanto agent activate <agent-id>' first."
+        )
+
+    if not force and not typer.confirm(
+        f"Delete memory '{memory_id}' from agent '{active_agent_id}'?"
+    ):
+        console.print("[yellow]Delete cancelled.[/yellow]")
+        return
+
+    client = get_client()
+
+    try:
+        with console.status("[cyan]Deleting memory...", spinner="dots"):
+            result = client.delete_memory(
+                agent_id=active_agent_id,
+                memory_id=memory_id,
+            )
+        elapsed = time.perf_counter() - start
+
+        console.print("[green]Memory deleted successfully![/green]")
+        console.print(f"[dim]Memory ID: {result.get('memory_id', memory_id)}[/dim]")
+        console.print(f"[dim]Agent: {result.get('agent_id', active_agent_id)}[/dim]")
+        console.print(f"[dim]Completed in {elapsed:.2f}s[/dim]")
+
+    except Exception as e:
+        _error(f"Failed to delete memory: {e}")
+
+
+@app.command()
 def upload(
     file_path: str = typer.Argument(..., help="Path to the file to upload"),
 ):
@@ -184,15 +556,6 @@ def upload(
         memanto upload notes.txt
     """
     from pathlib import Path
-
-    from memanto.app.clients.backend import Backend
-
-    if config_manager.get_backend() == Backend.ON_PREM:
-        _error(
-            "upload is not available on the on-prem backend "
-            "(no server-side file chunking).",
-            hint="Switch with: memanto config backend cloud",
-        )
 
     start = time.perf_counter()
     active_agent_id, active_session_token = config_manager.get_active_session()
@@ -260,6 +623,13 @@ def recall(
     min_similarity: float | None = typer.Option(
         None, "--min-similarity", help="Minimum similarity score"
     ),
+    min_confidence: float | None = typer.Option(
+        None,
+        "--min-confidence",
+        min=0.0,
+        max=1.0,
+        help="Minimum stored confidence score (0.0-1.0)",
+    ),
     tags: str | None = typer.Option(
         None, "--tags", help="Filter by tags (comma-separated)"
     ),
@@ -278,8 +648,18 @@ def recall(
         "--recent",
         help="Chronological query: return the most recently stored memories (newest first). No search query needed.",
     ),
+    active_only: bool = typer.Option(
+        False, "--active", help="Only active memories (exclude expired)"
+    ),
+    expired_only: bool = typer.Option(False, "--expired", help="Only expired memories"),
+    tool: str | None = _TOOL_OPTION,
 ):
-    """Search and retrieve memories for the active agent with temporal query support."""
+    """Search and retrieve memories for the active agent with temporal query support.
+
+    By default both active and expired memories are returned, each clearly
+    labelled. Narrow with --active or --expired.
+    """
+    _bind_calling_tool(tool)
     start = time.perf_counter()
     active_agent_id, active_session_token = config_manager.get_active_session()
 
@@ -304,6 +684,21 @@ def recall(
             hint="Temporal queries (--as-of, --changed-since, --recent) list memories directly. Remove the search query to continue.",
         )
 
+    if active_only and expired_only:
+        _error(
+            "Cannot use --active and --expired together.",
+            hint="Omit both to see active and expired memories side by side.",
+        )
+    status = "active" if active_only else "expired" if expired_only else "all"
+
+    # Point-in-time recall reconstructs what was live at a past date, so a
+    # present-day lifecycle filter would contradict the question being asked.
+    if as_of and status != "all":
+        _error(
+            "Cannot combine --as-of with --active/--expired.",
+            hint="--as-of already returns exactly the memories that were active at that date.",
+        )
+
     client = get_client()
     agent_id = active_agent_id
 
@@ -313,6 +708,14 @@ def recall(
 
         if not ts:
             return ts
+
+        # ``--as-of yesterday`` means the state at the end of that calendar
+        # day. The generic relative helper returns the start of the day because
+        # its normal consumer is a changed-since / created-after query; using
+        # that value here drops almost all memories created yesterday.
+        if flag_name == "--as-of" and ts.lower().strip() == "yesterday":
+            _, yesterday_end = get_yesterday_range()
+            return yesterday_end
 
         # Try parsing as relative time (e.g., "today", "last 2 hours")
         rel_ts = parse_relative_time(ts)
@@ -347,6 +750,7 @@ def recall(
                     as_of=as_of,
                     limit=limit,
                     type=type,
+                    tags=tag_list,
                 )
                 temporal_mode = "as_of"
             elif changed_since:
@@ -355,6 +759,7 @@ def recall(
                     since=changed_since,
                     limit=limit,
                     type=type,
+                    tags=tag_list,
                 )
                 temporal_mode = "changed_since"
             elif recent:
@@ -362,6 +767,8 @@ def recall(
                     agent_id=agent_id,
                     limit=limit,
                     type=type,
+                    tags=tag_list,
+                    status=status,
                 )
                 temporal_mode = "recent"
             elif query:
@@ -373,6 +780,8 @@ def recall(
                     type=type,
                     tags=tag_list,
                     min_similarity=min_similarity,
+                    min_confidence=min_confidence,
+                    status=status,
                 )
             else:
                 _error(
@@ -402,15 +811,18 @@ def recall(
         )
 
         for i, memory in enumerate(memories, 1):
-            score = memory.get("score") or 0.0
+            score = _as_float(memory.get("score"))
             mem_type = memory.get("type") or "unknown"
-            conf = memory.get("confidence") or 0.0
-            comp_conf = memory.get("computed_confidence")
+            conf = _as_float(memory.get("confidence"))
             title = memory.get("title") or "Untitled"
             content = memory.get("content") or ""
             created = memory.get("created_at") or ""
             status = memory.get("status") or "active"
             change_type = memory.get("change_type")
+            source = memory.get("source") or ""
+            source_ref = memory.get("source_ref") or ""
+            provenance = memory.get("provenance") or ""
+            mem_tags = memory.get("tags") or []
 
             # Determine memory source from ID pattern
             id_str = memory.get("id", "unknown")
@@ -421,26 +833,47 @@ def recall(
             else:
                 source_tag = "[cyan] · memory [/cyan]"
 
-            # Create panel for each memory
-            panel_content = f"[bold]{title}[/bold]\n\n{content[:200]}{'...' if len(content) > 200 else ''}\n\n"
+            # Create panel for each memory. Lifecycle state leads the panel so
+            # an expired memory can never be mistaken for a live one at a glance.
+            state_label = (
+                f"[{WARNING}][EXPIRED][/{WARNING}] "
+                if status == "expired"
+                else f"[{SUCCESS}][ACTIVE][/{SUCCESS}] "
+            )
+            panel_content = f"{state_label}[bold]{title}[/bold]\n\n{content[:200]}{'...' if len(content) > 200 else ''}\n\n"
 
-            # Show ID and confidence (computed if available)
-            if comp_conf is not None:
-                panel_content += f"[dim]ID: {id_str} | Type: {mem_type} | Confidence: {comp_conf:.2f} (computed) | Score: {score:.3f}[/dim]"
-            else:
-                panel_content += f"[dim]ID: {id_str} | Type: {mem_type} | Confidence: {conf:.2f} | Score: {score:.3f}[/dim]"
+            panel_content += f"[dim]ID: {id_str} | Type: {mem_type} | Confidence: {conf:.2f} | Score: {score:.3f}[/dim]"
 
             if created:
                 panel_content += f"\n[dim]Created: {format_local_time(created)}[/dim]"
             elif "_summary_" in id_str or "_chunk_" in id_str:
-                file_source = memory.get("source") or ""
-                if file_source:
-                    panel_content += f"\n[dim]Source file: {file_source}[/dim]"
                 panel_content += "\n[dim]Created: not available (file upload)[/dim]"
 
-            # Show status for non-standard queries
-            if temporal_mode != "standard" and status != "active":
-                panel_content += f"\n[dim]Status: {status}[/dim]"
+            # Show provenance metadata. `source` is unified: it holds the
+            # uploaded file name for file-upload memories and the origin
+            # (user, agent, ...) for everything else.
+            origin_parts = []
+            if source:
+                origin_parts.append(f"Source: {source}")
+            if source_ref:
+                origin_parts.append(f"Ref: {source_ref}")
+            if provenance:
+                origin_parts.append(f"Provenance: {provenance}")
+            if origin_parts:
+                panel_content += f"\n[dim]{' | '.join(origin_parts)}[/dim]"
+
+            # Show tags when present
+            if mem_tags:
+                panel_content += f"\n[dim]Tags: {', '.join(mem_tags)}[/dim]"
+
+            # Explain the expiry: when it happened and which policy did it.
+            if status == "expired":
+                expired_at = memory.get("expired_at")
+                expired_by = memory.get("expired_by") or "unknown"
+                when = format_local_time(expired_at) if expired_at else "unknown date"
+                panel_content += (
+                    f"\n[{WARNING}]Expired {when} · policy: {expired_by}[/{WARNING}]"
+                )
 
             # Show change type for differential queries
             if change_type:
@@ -448,7 +881,7 @@ def recall(
 
             # Determine border style
             border_style = BRIGHT if score > 0.8 else PRIMARY
-            if status == "superseded":
+            if status == "expired":
                 border_style = DIM
             elif change_type == "created":
                 border_style = SUCCESS
@@ -474,16 +907,10 @@ def answer(
     limit: int | None = typer.Option(
         None, "--limit", "-n", help="Number of context memories to use"
     ),
+    tool: str | None = _TOOL_OPTION,
 ):
     """Answer a question using RAG (Retrieval-Augmented Generation)."""
-    from memanto.app.clients.backend import Backend
-
-    if config_manager.get_backend() == Backend.ON_PREM:
-        _error(
-            "answer is not available on the on-prem backend.",
-            hint="Switch with: memanto config backend cloud",
-        )
-
+    _bind_calling_tool(tool)
     start = time.perf_counter()
     active_agent_id, active_session_token = config_manager.get_active_session()
 
@@ -518,7 +945,7 @@ def answer(
             console.print(f"\n[dim]Used {len(context)} memories as context:[/dim]")
             for i, mem in enumerate(context, 1):
                 console.print(
-                    f"  {i}. {mem.get('title', 'Untitled')} (score: {mem.get('score', 0):.3f})"
+                    f"  {i}. {mem.get('title', 'Untitled')} (score: {_as_float(mem.get('score')):.3f})"
                 )
 
         console.print(f"[dim]Completed in {elapsed:.2f}s[/dim]")
@@ -540,15 +967,6 @@ def daily_summary(
     ),
 ):
     """Generate a daily AI summary from session memories."""
-    from memanto.app.clients.backend import Backend
-
-    if config_manager.get_backend() == Backend.ON_PREM:
-        _error(
-            "daily-summary uses the LLM Answer endpoint, which is not "
-            "available on the on-prem backend.",
-            hint="Switch with: memanto config backend cloud",
-        )
-
     start = time.perf_counter()
     active_agent_id, _ = config_manager.get_active_session()
 
@@ -563,7 +981,7 @@ def daily_summary(
 
     # Resolve date
     if not date:
-        date = datetime.now().strftime("%Y-%m-%d")
+        date = utc_date_str()
 
     client = get_client()
 
@@ -578,7 +996,6 @@ def daily_summary(
         elapsed = time.perf_counter() - start
 
         summary = result.get("summary", {})
-        conflicts = result.get("conflicts", {})
 
         # Display Summary Status
         if summary.get("status") == "success":
@@ -588,9 +1005,106 @@ def daily_summary(
         else:
             console.print(f"[yellow]! Summary:[/yellow] {summary.get('status')}")
 
-        # Display Conflicts Status
+        # Display Auto-Export Status
+        export = result.get("export")
+        if export:
+            if export.get("status") != "error":
+                export_count = export.get("total_memories", 0)
+                console.print(
+                    f"[green]Memory export generated:[/green] {export_count} memories saved to cache"
+                )
+            else:
+                console.print(
+                    f"[yellow]  ! Auto-export failed:[/yellow] {export.get('error')}"
+                )
+
+        console.print(
+            "\n[dim]Conflict detection runs separately. "
+            "Run 'memanto detect-conflicts' or enable the schedule "
+            "with 'memanto schedule enable'.[/dim]"
+        )
+        console.print(f"\n[dim]Completed in {elapsed:.2f}s[/dim]")
+
+    except Exception as e:
+        _error(f"Failed to generate daily summary: {e}")
+
+
+@app.command("detect-conflicts")
+def detect_conflicts(
+    date: str | None = typer.Option(
+        None, "--date", "-d", help="Date in YYYY-MM-DD format (defaults to today)"
+    ),
+    agent_id: str | None = typer.Option(
+        None, "--agent", "-a", help="Agent identifier (defaults to active agent)"
+    ),
+):
+    """Generate the conflict report for an agent/date.
+
+    Runs the LLM conflict-detection pass over the day's session memories
+    and writes the JSON report to ``~/.memanto/conflicts/``. Resolve the
+    detected conflicts interactively with ``memanto conflicts``.
+
+    This is the command the schedule runs — see ``memanto schedule``.
+    """
+    start = time.perf_counter()
+    active_agent_id, _ = config_manager.get_active_session()
+
+    if not agent_id:
+        if not active_agent_id:
+            _error(
+                "No active agent.",
+                hint="Provide an agent ID or run 'memanto agent activate <agent-id>' first.",
+            )
+        agent_id = active_agent_id
+
+    if not date:
+        date = utc_date_str()
+
+    client = get_client()
+
+    try:
+        progress_state = {
+            "message": f"Detecting conflicts for '{agent_id}' on {date}…",
+            "run_id": None,
+        }
+
+        def on_progress(event_name: str, data: dict) -> None:
+            if event_name == "run_started" and data.get("run_id"):
+                progress_state["run_id"] = data["run_id"]
+            message = describe_conflict_progress(event_name, data)
+            if message:
+                progress_state["message"] = message
+            elif progress_state.get("run_id"):
+                progress_state["message"] = (
+                    f"Conflict detection in progress (run {progress_state['run_id']})…"
+                )
+
+        progress_message = progress_state["message"] or ""
+        with Live(
+            Text(progress_message, style="cyan"),
+            console=console,
+            refresh_per_second=4,
+            transient=True,
+        ) as live:
+
+            def _tick_progress() -> None:
+                live.update(Text(progress_state["message"] or "", style="cyan"))
+
+            def _on_progress(event_name: str, data: dict) -> None:
+                on_progress(event_name, data)
+                _tick_progress()
+
+            result = client.generate_conflict_report(
+                agent_id=agent_id, date=date, on_progress=_on_progress
+            )
+        elapsed = time.perf_counter() - start
+
+        conflicts = result.get("conflicts", {})
+
         if conflicts.get("status") == "success":
             count = conflicts.get("conflict_count", 0)
+            if progress_state.get("run_id"):
+                console.print(f"[dim]Moorche run:[/dim] {progress_state['run_id']}")
             console.print(
                 f"[green]Conflict report generated:[/green] {conflicts.get('json_path')}"
             )
@@ -606,23 +1120,10 @@ def daily_summary(
         else:
             console.print(f"[yellow]! Conflicts:[/yellow] {conflicts.get('status')}")
 
-        # Display Auto-Export Status
-        export = result.get("export")
-        if export:
-            if export.get("status") != "error":
-                export_count = export.get("total_memories", 0)
-                console.print(
-                    f"[green]Memory export generated:[/green] {export_count} memories saved to cache"
-                )
-            else:
-                console.print(
-                    f"[yellow]  ! Auto-export failed:[/yellow] {export.get('error')}"
-                )
-
         console.print(f"\n[dim]Completed in {elapsed:.2f}s[/dim]")
 
     except Exception as e:
-        _error(f"Failed to generate daily summary: {e}")
+        _error(f"Failed to detect conflicts: {e}")
 
 
 @app.command()
@@ -661,7 +1162,7 @@ def conflicts(
 
     # Resolve date
     if not date:
-        date = datetime.now().strftime("%Y-%m-%d")
+        date = utc_date_str()
 
     client = get_client()
 
@@ -676,7 +1177,7 @@ def conflicts(
             f"\n[green]No unresolved conflicts for agent '{agent_id}' on {date}[/green]"
         )
         console.print(
-            "[dim]Run 'memanto daily-summary' to generate a conflict report.[/dim]"
+            "[dim]Run 'memanto detect-conflicts' to generate a conflict report.[/dim]"
         )
         return
 
@@ -719,9 +1220,9 @@ def conflicts(
 
     # Load full conflict list to get original indices
 
-    json_path = (
-        Path.home() / ".memanto" / "conflicts" / f"{agent_id}_{date}_conflicts.json"
-    )
+    from memanto.app.config import get_conflict_report_path
+
+    json_path = get_conflict_report_path(agent_id, date)
     with open(json_path, encoding="utf-8") as f:
         all_conflicts = json.load(f)
 
@@ -794,11 +1295,16 @@ def conflicts(
             marker = " [green]<< recommended[/green]" if current_rec == rec_val else ""
             console.print(f"  [{BRIGHT}][{key}][/{BRIGHT}] {label}{marker}")
 
-        _opt("1", "Keep A (old memory)", "keep_old")
-        _opt("2", "Keep B (new memory)", "keep_new")
+        console.print("  [dim]Delete the loser (permanent):[/dim]")
+        _opt("1", "Keep A (old memory) — deletes B", "keep_old")
+        _opt("2", "Keep B (new memory) — deletes A", "keep_new")
         _opt("3", "Keep both", None)
         _opt("4", "Remove both", "remove_both")
-        _opt("5", "Manual: type replacement", "merge")
+        console.print("  [dim]Expire the loser (reversible):[/dim]")
+        _opt("5", "Expire A (old memory)", None)
+        _opt("6", "Expire B (new memory)", None)
+        _opt("7", "Expire both", None)
+        _opt("8", "Manual: type replacement", "merge")
         console.print("  [dim]\\[s] Skip  \\[q] Quit[/dim]\n")
 
         choice = typer.prompt("Choose", default="s").strip().lower()
@@ -808,7 +1314,10 @@ def conflicts(
             "2": "keep_new",
             "3": "keep_both",
             "4": "remove_both",
-            "5": "manual",
+            "5": "expire_old",
+            "6": "expire_new",
+            "7": "expire_both",
+            "8": "manual",
         }
 
         if choice == "q":
@@ -848,6 +1357,9 @@ def conflicts(
                 "keep_new": "[green]  OK Kept B (new). Old memory deleted.[/green]",
                 "keep_both": "[green]  OK Both memories kept.[/green]",
                 "remove_both": "[green]  OK Both memories removed.[/green]",
+                "expire_old": "[green]  OK Expired A (old). Restore it any time.[/green]",
+                "expire_new": "[green]  OK Expired B (new). Restore it any time.[/green]",
+                "expire_both": "[green]  OK Both memories expired.[/green]",
             }
             if action == "manual":
                 new_id = result.get("new_memory_id", "unknown")

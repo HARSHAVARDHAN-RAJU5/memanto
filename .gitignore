@@ -44,6 +44,7 @@ env/
 .vscode/
 .idea/
 .claude/
+.kiro/
 *.swp
 *.swo
 *~
@@ -104,3 +105,9 @@ temp/
 
 # Generated version file
 **/_version.py
+
+# npm pack output
+*.tgz
+# Data files
+/takeout-*
+/data-*

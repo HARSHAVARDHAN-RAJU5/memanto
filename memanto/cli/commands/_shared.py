@@ -5,19 +5,22 @@ All command modules import from here to avoid circular dependencies.
 """
 
 import os
-from datetime import datetime
 from typing import NoReturn
 
-import jwt
 import typer
 from rich.console import Console
 from rich.panel import Panel
+
+from memanto.app.config import settings
+from memanto.app.services.session_service import get_session_service
+from memanto.app.utils.errors import InvalidSessionTokenError, SessionExpiredError
 
 # Re-export temporal helpers
 from memanto.app.utils.temporal_helpers import (  # noqa: F401
     format_current_local_time,
     format_local_time,
     parse_relative_time,
+    utc_now,
 )
 from memanto.cli.client.sdk_client import SdkClient
 from memanto.cli.config.manager import ConfigManager
@@ -63,14 +66,20 @@ session_app = typer.Typer(help="Legacy aliases for agent activation commands")
 config_app = typer.Typer(help="Configuration commands")
 schedule_app = typer.Typer(help="Daily summary scheduling commands")
 memory_app = typer.Typer(help="Memory management commands")
+policy_app = typer.Typer(help="Memory expiry policy commands")
 connect_app = typer.Typer(help="Connect MEMANTO to external tools")
+migrate_app = typer.Typer(
+    help="Migrate memories from other providers (Mem0/Letta/Supermemory) into Memanto"
+)
 
 app.add_typer(agent_app, name="agent")
 app.add_typer(session_app, name="session")
 app.add_typer(config_app, name="config")
 app.add_typer(schedule_app, name="schedule")
 app.add_typer(memory_app, name="memory")
+app.add_typer(policy_app, name="policy")
 app.add_typer(connect_app, name="connect")
+app.add_typer(migrate_app, name="migrate")
 
 
 def _error(message: str, hint: str | None = None) -> NoReturn:
@@ -111,30 +120,30 @@ def get_client() -> SdkClient:
 
     # Restore active session if available
     active_agent_id, active_session_token = config_manager.get_active_session()
-    session_cfg = config_manager.get_session_config()
 
     if active_session_token and active_agent_id:
         client.session_token = active_session_token
         client.agent_id = active_agent_id
 
-        # Check if the token is completely expired, and auto-renew if enabled
-        if session_cfg.get("auto_renew_enabled", True):
+        # Expiry is already handled upstream: get_active_session() auto-recreates
+        # a lapsed session, so the token above is fresh. What remains here is a
+        # token that no longer verifies at all - typically a rotated
+        # MEMANTO_SECRET_KEY - which used to break analyze LLM narratives
+        # mid-run. Gate it on the same single toggle as every other path
+        # (settings, which config.yaml feeds) rather than re-reading the YAML,
+        # so turning auto-recreate off disables it everywhere.
+        if settings.SESSION_AUTO_RECREATE_ENABLED:
+            session_service = get_session_service()
+            needs_reactivate = False
             try:
-                payload = jwt.decode(
-                    active_session_token, options={"verify_signature": False}
-                )
-                expires_at_str = payload.get("expires_at", "")
-                if expires_at_str.endswith("Z"):
-                    expires_at_str = expires_at_str[:-1]
+                session_service.validate_session(active_session_token)
+            except (SessionExpiredError, InvalidSessionTokenError):
+                needs_reactivate = True
 
-                if expires_at_str:
-                    expires_at = datetime.fromisoformat(expires_at_str)
-
-                    if datetime.utcnow() > expires_at:
-                        # Silently revive the session — activate_agent updates
-                        # SessionService state and the client's own token.
-                        client.activate_agent(active_agent_id)
-            except Exception:
-                pass  # Fall back to letting the underlying request fail if something is malformed
+            if needs_reactivate:
+                try:
+                    client.activate_agent(active_agent_id)
+                except Exception:
+                    pass
 
     return client

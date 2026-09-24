@@ -5,6 +5,7 @@ Server-side settings (loaded from .env via pydantic-settings).
 CLI config models have been moved to cli/config/manager.py.
 """
 
+import logging
 import os
 from pathlib import Path
 
@@ -12,6 +13,8 @@ import yaml  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 # Load project .env first, then ~/.memanto/.env for the API key
 load_dotenv()
@@ -53,19 +56,44 @@ if _config_file.exists():
             if _smart_parse is not None:
                 os.environ["AUTO_PARSE_ENABLED"] = str(_smart_parse)
 
+            # Session toggles. The Web UI and ``memanto config`` persist these
+            # to config.yaml, but SessionService reads them off ``settings``,
+            # so without this they would be inert for the server and only
+            # half-honoured by the CLI. Use setdefault so an explicitly
+            # exported SESSION_AUTO_* (containerised deployments) still wins.
+            _session = _memanto.get("session", {})
+            if isinstance(_session, dict):
+                for _yaml_key, _env_key in (
+                    ("auto_renew_enabled", "SESSION_AUTO_RENEW_ENABLED"),
+                    ("auto_recreate_enabled", "SESSION_AUTO_RECREATE_ENABLED"),
+                ):
+                    _toggle = _session.get(_yaml_key)
+                    if isinstance(_toggle, bool):
+                        os.environ.setdefault(_env_key, str(_toggle))
+
             # Backend selection (cloud | on-prem)
             _backend = _memanto.get("backend")
             if _backend:
                 os.environ["MEMANTO_BACKEND"] = str(_backend)
-            _on_prem = _memanto.get("on_prem", {})
-            _op_url = _on_prem.get("url")
+    except Exception as _exc:
+        logger.warning("Failed to load ~/.memanto/config.yaml: %s", _exc)
+
+    # On-prem URL lives in ~/.memanto/on-prem/state.json so on-prem onboarding
+    # never has to touch the shared cloud yaml.
+    try:
+        import json as _json
+
+        _state_path = Path.home() / ".memanto" / "on-prem" / "state.json"
+        if _state_path.exists():
+            _state = _json.loads(_state_path.read_text())
+            _op_url = _state.get("url")
             if _op_url:
                 os.environ["MOORCHEH_ONPREM_URL"] = str(_op_url)
-            _op_embed = _on_prem.get("embedding_provider")
+            _op_embed = _state.get("embedding_provider")
             if _op_embed:
                 os.environ["MOORCHEH_ONPREM_EMBEDDING_PROVIDER"] = str(_op_embed)
-    except Exception:
-        pass
+    except Exception as _exc:
+        logger.warning("Failed to load ~/.memanto/on-prem/state.json: %s", _exc)
 
 
 # CLI & YAML Format Models (kept for backward compat with config.yaml structure)
@@ -86,6 +114,7 @@ class SessionConfig(BaseModel):
     warn_before_expiry_minutes: int = 15
     auto_renew_enabled: bool = True
     auto_renew_interval_hours: int = 6
+    auto_recreate_enabled: bool = True
 
 
 class CLIConfig(BaseModel):
@@ -107,6 +136,9 @@ class Settings(BaseSettings):
     MEMANTO_BACKEND: str = "cloud"
     MOORCHEH_ONPREM_URL: str = "http://localhost:8080"
     MOORCHEH_ONPREM_EMBEDDING_PROVIDER: str = ""
+    # HTTP read timeout (seconds) for the on-prem MoorchehClient. Default 300
+    # so first-call LLM cold-starts on Ollama don't hit the SDK's 30s default.
+    MOORCHEH_ONPREM_TIMEOUT: int = 300
 
     # Server Configuration
     HOST: str = "0.0.0.0"
@@ -115,14 +147,22 @@ class Settings(BaseSettings):
 
     # CORS Configuration
     ALLOWED_ORIGINS: list[str] = ["*"]
+    # Setting allow_credentials=True with a wildcard origin causes Starlette to
+    # reflect any request Origin back, allowing any site to make credentialed
+    # cross-origin requests.  Default to False; set to True only when ALLOWED_ORIGINS
+    # lists explicit trusted domains (never with "*").
+    CORS_ALLOW_CREDENTIALS: bool = False
 
     # Session Configuration
-    MEMANTO_SECRET_KEY: str = "memanto-default-secret-change-in-production"
+    MEMANTO_SECRET_KEY: str = ""
     SESSION_DEFAULT_DURATION_HOURS: int = 6
     SESSION_AUTO_EXTEND: bool = True
     SESSION_EXTEND_THRESHOLD_MINUTES: int = 30
     SESSION_AUTO_RENEW_ENABLED: bool = True
     SESSION_AUTO_RENEW_INTERVAL_HOURS: int = 6
+    # Transparently issue a fresh session (new token) when a request presents
+    # an expired-but-not-terminated token. Gated behind management access.
+    SESSION_AUTO_RECREATE_ENABLED: bool = True
 
     # Memory Configuration
     DEFAULT_TTL_SECONDS: int = 3600  # 1 hour
@@ -138,11 +178,6 @@ class Settings(BaseSettings):
 
     # Recall / Search Configuration
     RECALL_LIMIT: int = 10  # default top-N results for recall/search
-
-    # Validation Configuration
-    REQUIRE_VALIDATION_FOR: list[str] = ["fact", "preference"]
-    PROVISIONAL_TTL_SECONDS: int = 3600  # 1 hour
-    PROVISIONAL_MAX_CONFIDENCE: float = 0.5
 
     # Schedule Configuration
     MEMANTO_SCHEDULE_TIME: str = "23:55"
@@ -174,3 +209,21 @@ def get_data_dir() -> Path:
         d.mkdir(parents=True, exist_ok=True)
         return d
     return base
+
+
+def get_conflicts_dir() -> Path:
+    """Return the shared directory for conflict reports."""
+    d = get_data_dir() / "conflicts"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_conflict_report_path(agent_id: str, date: str) -> Path:
+    """Return a safely constructed path for a conflict report, validating components against traversal."""
+    import re
+
+    if not re.match(r"^[\w\-]+$", agent_id):
+        raise ValueError(f"Invalid agent_id format: {agent_id}")
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        raise ValueError(f"Invalid date format: {date}")
+    return get_conflicts_dir() / f"{agent_id}_{date}_conflicts.json"

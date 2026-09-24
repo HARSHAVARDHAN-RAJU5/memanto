@@ -22,10 +22,14 @@ class ValidationError(MemantoError):
     pass
 
 
-class MemoryError(MemantoError):
+class MemoryOperationError(MemantoError):
     """Memory operation error"""
 
     pass
+
+
+# Deprecated alias to maintain compatibility with external integrations like MCP.
+MemoryError = MemoryOperationError
 
 
 class NamespaceError(MemantoError):
@@ -91,6 +95,9 @@ class AgentAlreadyExistsError(AgentError):
 def map_error_to_http_exception(error: Exception) -> HTTPException:
     """Map internal errors to HTTP exceptions"""
 
+    if isinstance(error, HTTPException):
+        return error
+
     if isinstance(error, ValidationError):
         return HTTPException(
             status_code=400,
@@ -101,11 +108,11 @@ def map_error_to_http_exception(error: Exception) -> HTTPException:
             },
         )
 
-    elif isinstance(error, MemoryError):
+    elif isinstance(error, MemoryOperationError):
         return HTTPException(
             status_code=500,
             detail={
-                "error": "MemoryError",
+                "error": "MemoryOperationError",
                 "message": error.message,
                 "details": error.details,
             },

@@ -41,7 +41,6 @@ class MemoryParsingService:
         for pattern in [
             r"https?://[^\s<>()\[\]{},;:\"']*[^\s<>()\[\]{},;:\"'.,!?]",
             r"\b(?:endpoint|url|api key|path|email|phone|address)\b",
-            r"\b(?:is|are|was|were)\b",
         ]
     ]
 
@@ -56,6 +55,20 @@ class MemoryParsingService:
             MemoryRule(re.compile(pattern, re.IGNORECASE), score)
             for pattern, score in [
                 (
+                    r"\b(?:i|we|they|he|she|user|client|customer)\s+"
+                    r"(?:really\s+)?"
+                    r"(?:(?:do|does|did)\s+not|don['’]t|doesn['’]t|didn['’]t|"
+                    r"no longer|never)\s+(?:really\s+)?"
+                    r"(?:like(?:d)?|love(?:d)?|prefer(?:red)?|enjoy(?:ed)?|favou?r(?:ed)?)\b",
+                    6,
+                ),
+                (
+                    r"\b(?:i|we|they|he|she|user|client|customer)\s+"
+                    r"(?:can['’]t|can not|cannot)\s+stand\b",
+                    6,
+                ),
+                (r"\b(?:prefer|prefers)\s+not\s+to\b", 5),
+                (
                     r"\b(?:i|we|they|he|she|user|client|customer)\s+(?:really\s+)?(?:like|likes|love|loves|prefer|prefers|enjoy|enjoys|favor|favors)\b",
                     4,
                 ),
@@ -68,7 +81,10 @@ class MemoryParsingService:
                     r"\b(?:would rather|rather use|prefer to|prefers to|preference for|likes to)\b",
                     4,
                 ),
-                (r"\b(?:dislike|dislikes|hate|hates|avoid using|not a fan of)\b", 3),
+                (
+                    r"\b(?:dislike|dislikes|hate|hates|detest|detests|loathe|loathes|despise|despises|not a fan of)\b",
+                    5,
+                ),
                 (
                     r"\b(?:works best for|feels better with|is more comfortable with)\b",
                     3,
@@ -160,7 +176,7 @@ class MemoryParsingService:
                     r"\b(?:insight|key point|root cause|what worked|what did not work)\b",
                     4,
                 ),
-                (r"\b(?:next time|in hindsight)\b", 3),
+                (r"\b(?:next time|in retrospect|looking back|going forward)\b", 3),
             ]
         ],
         "error": [
