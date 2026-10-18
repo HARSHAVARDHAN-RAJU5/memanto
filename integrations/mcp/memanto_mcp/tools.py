@@ -333,14 +333,21 @@ def register_tools(mcp: Any, lifecycle: MemantoLifecycle) -> None:
     @mcp.tool(
         name="remember",
         description=(
-            "Store a single piece of information in the agent's long-term "
-            "memory. Use this whenever the user shares a stable fact, "
-            "preference, decision, goal, or instruction you should recall "
-            "in a future conversation. Memory is typed (13 categories) and "
-            "carries confidence + provenance so later retrievals can rank "
-            f"and filter intelligently. Content is capped at "
-            f"{_MAX_CONTENT_LENGTH} chars - store atomic, self-contained "
-            "statements."
+            "Save one durable piece of information to long-term memory so it "
+            "is available in future sessions. Call this on your own, without "
+            "waiting for the user to say 'remember', whenever:\n"
+            "- the user states a rule or standing instruction ('never push "
+            "without asking me', 'always use pnpm')\n"
+            "- the user states a preference or makes a decision\n"
+            "- a goal, deadline or commitment is agreed\n"
+            "- you learn a stable fact about the user, the project or its "
+            "setup\n"
+            "- a bug fix, failed attempt or correction teaches a lesson "
+            "worth keeping\n"
+            "Write one short, general statement ('Ask the user before any git "
+            "push'), not a transcript. Skip small talk and one-off details. "
+            "For important items, a quick `recall` first avoids duplicates. "
+            f"Content is capped at {_MAX_CONTENT_LENGTH} characters."
         ),
     )
     def remember(
@@ -552,11 +559,20 @@ def register_tools(mcp: Any, lifecycle: MemantoLifecycle) -> None:
     @mcp.tool(
         name="recall",
         description=(
-            "Search the agent's memories by semantic similarity. Returns the "
-            "top-N most relevant items. Use this FIRST before asking the user "
-            "to repeat information - the agent may already remember it. The "
-            "query should be natural language ('what does the user prefer for "
-            "code style?'), not keywords."
+            "Search long-term memory for relevant context (semantic search, "
+            "top-N results). Call this on your own, without waiting to be "
+            "asked:\n"
+            "- at the start of a new task or topic, before writing code or "
+            "running commands, to pick up the user's rules, preferences and "
+            "earlier decisions\n"
+            "- when the user refers to earlier work ('like last time', 'the "
+            "bug we fixed')\n"
+            "- before choosing a library, pattern or convention the user "
+            "hasn't specified\n"
+            "- before asking the user for something they may have told you "
+            "before\n"
+            "Use a natural-language query ('what are the user's rules for "
+            "git?'), not keywords."
         ),
     )
     def recall(
@@ -817,8 +833,8 @@ def register_tools(mcp: Any, lifecycle: MemantoLifecycle) -> None:
             "Ask a natural-language question and get an LLM-generated answer "
             "grounded ONLY in the agent's stored memories (RAG). Prefer this "
             "over `recall` when you need a synthesized answer rather than a "
-            "ranked list. Returns the answer text plus the supporting memory "
-            "sources."
+            "ranked list, e.g. 'what did we decide about X?'. Returns the "
+            "answer text plus the supporting memory sources."
         ),
     )
     def answer(
