@@ -9,41 +9,131 @@
     <link rel="icon" type="image/x-icon" href="/ui/static/favicon.ico">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
+    <script>
+        // Apply the saved theme before first paint so dark mode doesn't flash
+        // light. Light (the landing's look) is the default.
+        try {
+            if (localStorage.getItem('memanto-theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+        } catch (e) { }
+    </script>
     <style>
+        /* Design tokens mirror memanto-landing (src/app/globals.css): the light
+           theme is the landing's lavender-white canvas with the Memanto purple
+           and cyan accents; the dark theme is the landing's near-black palette.
+           Light is the default; [data-theme="dark"] on <html> switches. */
         :root {
-            --bg-primary: #000000;
-            --bg-secondary: #050508;
-            --bg-card: #0a0a0f;
-            --bg-card-hover: #111118;
-            --bg-input: #0a0a10;
-            --bg-surface: #08080d;
-            --border: #1a1a25;
-            --border-hover: #2a2a3a;
-            --border-focus: #06b6d4;
-            --text-primary: #f0f0f5;
-            --text-secondary: #b4b4c4;
-            --text-dim: #8e8ea3;
-            --accent: #06b6d4;
-            --accent-hover: #22d3ee;
-            --accent-glow: rgba(6, 182, 212, 0.15);
-            --accent-glow-strong: rgba(6, 182, 212, 0.25);
-            --indigo: #6366f1;
-            --indigo-glow: rgba(99, 102, 241, 0.15);
-            --success: #22c55e;
-            --success-bg: rgba(34, 197, 94, 0.1);
-            --warning: #f59e0b;
-            --warning-bg: rgba(245, 158, 11, 0.1);
-            --error: #ef4444;
-            --error-bg: rgba(239, 68, 68, 0.1);
-            --cyan: #06b6d4;
-            --pink: #ec4899;
+            color-scheme: light;
+            --bg-primary: #fbfaff;
+            --bg-secondary: #f6f4fc;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f8f6fd;
+            --bg-input: #ffffff;
+            --bg-surface: #f6f4fc;
+            --bg-sidebar: rgba(255, 255, 255, 0.78);
+            --border: rgba(28, 22, 58, 0.09);
+            --border-soft: rgba(28, 22, 58, 0.06);
+            --border-hover: rgba(107, 78, 173, 0.32);
+            --border-focus: #6b4ead;
+            --text-primary: #16131f;
+            --text-secondary: #3f3b52;
+            --text-dim: #5c5872;
+            --ink-rgb: 28, 22, 58;
+            --accent: #6b4ead;
+            --accent-rgb: 107, 78, 173;
+            --accent-hover: #5534a5;
+            --accent-grad: linear-gradient(180deg, #7a5cc0 0%, #5534a5 100%);
+            --accent-glow: rgba(107, 78, 173, 0.1);
+            --accent-glow-strong: rgba(107, 78, 173, 0.22);
+            --indigo: #0891b2;
+            --indigo-glow: rgba(8, 145, 178, 0.1);
+            --success: #15803d;
+            --success-bg: rgba(21, 128, 61, 0.09);
+            --warning: #b45309;
+            --warning-bg: rgba(180, 83, 9, 0.09);
+            --error: #dc2626;
+            --error-bg: rgba(220, 38, 38, 0.08);
+            --cyan: #0891b2;
+            --cyan-bright: #00d2fe;
+            --pink: #db2777;
+            --shadow-card: 0 1px 2px rgba(46, 32, 98, 0.04), 0 10px 30px -12px rgba(46, 32, 98, 0.12);
+            --shadow-card-hover: 0 1px 2px rgba(46, 32, 98, 0.05), 0 22px 44px -16px rgba(46, 32, 98, 0.2);
+            --shadow-pop: 0 1px 2px rgba(46, 32, 98, 0.05), 0 24px 56px -16px rgba(46, 32, 98, 0.25);
+            --shadow-btn: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(46, 32, 98, 0.2), 0 8px 20px -6px rgba(85, 52, 165, 0.45);
+            --shadow-btn-hover: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(46, 32, 98, 0.2), 0 14px 28px -8px rgba(85, 52, 165, 0.55);
+            --backdrop: rgba(22, 19, 31, 0.35);
+            --grid-line: rgba(28, 22, 58, 0.045);
+            --wash:
+                radial-gradient(60% 50% at 82% 0%, rgba(107, 78, 173, 0.14) 0%, transparent 70%),
+                radial-gradient(50% 45% at 12% 10%, rgba(0, 210, 254, 0.11) 0%, transparent 70%),
+                linear-gradient(180deg, #f4f1ff 0%, #fbfaff 60%);
+            /* Contribution graph: brand purple scale instead of GitHub green. */
+            --heat-0: #eeebf6;
+            --heat-1: #d9cdf3;
+            --heat-2: #b39be4;
+            --heat-3: #8a6bcf;
+            --heat-4: #5534a5;
+            --chart-tick: #5c5872;
+            --chart-grid: rgba(28, 22, 58, 0.07);
             --sidebar-w: 240px;
-            --radius: 14px;
+            --radius: 16px;
             --radius-sm: 10px;
             --radius-xs: 6px;
             --transition: 0.2s ease;
-            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-            --font-sans: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+            --font-sans: var(--font-mono);
+        }
+
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --bg-primary: #060608;
+            --bg-secondary: #09090b;
+            --bg-card: #0f0d18;
+            --bg-card-hover: #15131f;
+            --bg-input: #0a0a0f;
+            --bg-surface: #0a0a0f;
+            --bg-sidebar: rgba(10, 10, 15, 0.82);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-soft: rgba(255, 255, 255, 0.05);
+            --border-hover: rgba(157, 122, 214, 0.4);
+            --border-focus: #9d7ad6;
+            --text-primary: #e8e8f0;
+            --text-secondary: #b4b2c8;
+            --text-dim: #8f8ca8;
+            --ink-rgb: 255, 255, 255;
+            --accent: #a888e0;
+            --accent-rgb: 157, 122, 214;
+            --accent-hover: #c4b0f0;
+            --accent-grad: linear-gradient(180deg, #7a5cc0 0%, #5534a5 100%);
+            --accent-glow: rgba(157, 122, 214, 0.14);
+            --accent-glow-strong: rgba(157, 122, 214, 0.28);
+            --indigo: #00d2fe;
+            --indigo-glow: rgba(0, 210, 254, 0.12);
+            --success: #7ee787;
+            --success-bg: rgba(126, 231, 135, 0.1);
+            --warning: #fbcb6f;
+            --warning-bg: rgba(251, 203, 111, 0.1);
+            --error: #ff8a80;
+            --error-bg: rgba(255, 138, 128, 0.1);
+            --cyan: #00d2fe;
+            --pink: #f472b6;
+            --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+            --shadow-card-hover: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 22px 44px -16px rgba(0, 0, 0, 0.7);
+            --shadow-pop: 0 24px 64px rgba(0, 0, 0, 0.6);
+            --shadow-btn: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 20px -6px rgba(107, 78, 173, 0.5);
+            --shadow-btn-hover: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 14px 28px -8px rgba(107, 78, 173, 0.6);
+            --backdrop: rgba(0, 0, 0, 0.7);
+            --grid-line: rgba(255, 255, 255, 0.035);
+            --wash:
+                radial-gradient(60% 50% at 82% 0%, rgba(107, 78, 173, 0.18) 0%, transparent 70%),
+                radial-gradient(50% 45% at 12% 10%, rgba(0, 210, 254, 0.07) 0%, transparent 70%),
+                linear-gradient(180deg, #0a0812 0%, #060608 60%);
+            --heat-0: #16141f;
+            --heat-1: #2e2350;
+            --heat-2: #4a3480;
+            --heat-3: #7a5cc0;
+            --heat-4: #b69cf0;
+            --chart-tick: #8f8ca8;
+            --chart-grid: rgba(255, 255, 255, 0.06);
         }
 
         *,
@@ -64,7 +154,8 @@
         }
 
         ::-webkit-scrollbar {
-            width: 5px;
+            width: 6px;
+            height: 6px;
         }
 
         ::-webkit-scrollbar-track {
@@ -72,8 +163,23 @@
         }
 
         ::-webkit-scrollbar-thumb {
-            background: var(--border);
+            background: rgba(var(--ink-rgb), 0.14);
             border-radius: 3px;
+        }
+
+        ::selection {
+            background: rgba(var(--accent-rgb), 0.2);
+        }
+
+        /* Buttons don't inherit the page font by default; the landing resets
+           this too, so nav items and tabs stay in JetBrains Mono. */
+        button {
+            font-family: inherit;
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
         }
 
         /* ── Layout ── */
@@ -85,9 +191,9 @@
 
         .sidebar {
             width: var(--sidebar-w);
-            background: rgba(5, 5, 10, 0.85);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: var(--bg-sidebar);
+            backdrop-filter: saturate(180%) blur(16px);
+            -webkit-backdrop-filter: saturate(180%) blur(16px);
             border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
@@ -103,21 +209,31 @@
             position: relative;
         }
 
-        /* Subtle grid background */
-        .main::before {
+        /* Landing hero backdrop: purple/cyan wash plus a 64px grid that fades
+           out from the top (Hero.module.css .bgWash / .bgGrid). */
+        .main::before,
+        .main::after {
             content: '';
             position: fixed;
             top: 0;
             left: var(--sidebar-w);
             right: 0;
             bottom: 0;
-            background-image:
-                radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.04) 0%, transparent 60%),
-                linear-gradient(rgba(20, 20, 35, 0.3) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(20, 20, 35, 0.3) 1px, transparent 1px);
-            background-size: 100% 100%, 60px 60px, 60px 60px;
             pointer-events: none;
             z-index: 0;
+        }
+
+        .main::before {
+            background: var(--wash);
+        }
+
+        .main::after {
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 64px 64px;
+            -webkit-mask-image: radial-gradient(80% 70% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.5) 50%, transparent 85%);
+            mask-image: radial-gradient(80% 70% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.5) 50%, transparent 85%);
         }
 
         .main>* {
@@ -135,18 +251,40 @@
             background: transparent;
         }
 
-        .sidebar-logo .logo-stack img {
-            transition: transform 0.3s ease;
-        }
-
-        .sidebar-logo .logo-stack img:hover {
-            transform: scale(1.02);
-        }
-
         .logo-stack {
             display: flex;
             flex-direction: column;
             gap: 12px;
+        }
+
+        /* Landing navbar lockup: purple ant + "Memanto" wordmark in the text
+           colour, so it reads on both themes (the old logo.svg had a white
+           wordmark baked in). */
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-primary) !important;
+            text-decoration: none;
+        }
+
+        .brand-ant {
+            width: 30px;
+            height: 37px;
+            color: var(--accent);
+            flex-shrink: 0;
+            transition: color 0.2s ease;
+        }
+
+        .brand:hover .brand-ant {
+            color: #00b4d8;
+        }
+
+        .brand-word {
+            font-size: 26px;
+            font-weight: 600;
+            letter-spacing: -0.04em;
+            line-height: 1;
         }
 
         .sidebar-logo p {
@@ -190,15 +328,15 @@
         }
 
         .nav-item:hover {
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--text-secondary);
-            border-color: var(--border);
+            background: rgba(var(--ink-rgb), 0.04);
+            color: var(--text-primary);
         }
 
         .nav-item.active {
             background: var(--accent-glow);
             color: var(--accent);
-            border-color: rgba(6, 182, 212, 0.2);
+            font-weight: 600;
+            box-shadow: inset 2px 0 0 var(--accent);
         }
 
         .nav-item svg {
@@ -225,8 +363,41 @@
         }
 
         .sidebar-footer {
-            padding: 16px;
+            padding: 14px 16px;
             border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .sidebar-footer .sidebar-status {
+            min-width: 0;
+        }
+
+        .sidebar-footer .sidebar-status span:last-child {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .theme-toggle {
+            flex-shrink: 0;
+            border-radius: 999px;
+        }
+
+        .theme-toggle svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        .theme-toggle .ico-sun,
+        :root[data-theme="dark"] .theme-toggle .ico-moon {
+            display: none;
+        }
+
+        :root[data-theme="dark"] .theme-toggle .ico-sun {
+            display: block;
         }
 
         .sidebar-status {
@@ -239,6 +410,7 @@
         }
 
         .status-dot {
+            flex-shrink: 0;
             width: 7px;
             height: 7px;
             border-radius: 50%;
@@ -303,18 +475,21 @@
         }
 
         .page-header h2 {
-            font-size: 28px;
-            font-weight: 700;
-            letter-spacing: -0.8px;
+            font-size: 30px;
+            font-weight: 600;
+            letter-spacing: -0.04em;
+            line-height: 1.15;
             color: var(--text-primary);
+            text-wrap: balance;
         }
 
         .page-header p {
             color: var(--text-dim);
-            margin-top: 6px;
+            margin-top: 8px;
             font-size: 14px;
+            font-weight: 500;
             font-family: var(--font-mono);
-            letter-spacing: 0.3px;
+            text-wrap: pretty;
         }
 
         /* ── Cards ── */
@@ -333,16 +508,18 @@
             transition: all 0.25s ease;
             position: relative;
             overflow: hidden;
+            box-shadow: var(--shadow-card);
         }
 
+        /* Cyan→purple hairline from the landing's eyebrow rule. */
         .card::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+            height: 2px;
+            background: linear-gradient(90deg, var(--cyan-bright, #00d2fe), var(--accent));
             opacity: 0;
             transition: opacity 0.3s;
         }
@@ -350,7 +527,7 @@
         .card:hover {
             border-color: var(--border-hover);
             transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: var(--shadow-card-hover);
         }
 
         .card:hover::before {
@@ -369,6 +546,8 @@
         .card-value {
             font-size: 26px;
             font-weight: 700;
+            letter-spacing: -0.03em;
+            font-feature-settings: "tnum";
         }
 
         .card-sub {
@@ -384,19 +563,25 @@
             border-radius: var(--radius);
             padding: 24px;
             margin-bottom: 24px;
+            box-shadow: var(--shadow-card);
         }
 
+        /* Section eyebrow from the landing (.label-md): small purple caps led
+           by a short cyan→purple rule. The rule is a background, not a
+           pseudo-element, so titles laid out with space-between keep working. */
         .panel-title {
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
             margin-bottom: 18px;
             display: flex;
             align-items: center;
             gap: 8px;
-            color: var(--text-secondary);
+            color: var(--accent);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.14em;
             font-family: var(--font-mono);
+            padding-left: 28px;
+            background: linear-gradient(90deg, var(--cyan-bright, #00d2fe), var(--accent)) no-repeat left center / 18px 2px;
         }
 
         /* ── Badges ── */
@@ -417,31 +602,31 @@
         .badge-success {
             background: var(--success-bg);
             color: var(--success);
-            border: 1px solid rgba(34, 197, 94, 0.2);
+            border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
         }
 
         .badge-warning {
             background: var(--warning-bg);
             color: var(--warning);
-            border: 1px solid rgba(245, 158, 11, 0.2);
+            border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent);
         }
 
         .badge-error {
             background: var(--error-bg);
             color: var(--error);
-            border: 1px solid rgba(239, 68, 68, 0.2);
+            border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
         }
 
         .badge-info {
             background: var(--accent-glow);
             color: var(--accent);
-            border: 1px solid rgba(6, 182, 212, 0.2);
+            border: 1px solid rgba(var(--accent-rgb), 0.25);
         }
 
         .badge-accent {
             background: var(--indigo-glow);
             color: var(--indigo);
-            border: 1px solid rgba(99, 102, 241, 0.2);
+            border: 1px solid color-mix(in srgb, var(--indigo) 25%, transparent);
         }
 
         /* ── Forms ── */
@@ -460,11 +645,34 @@
             outline: none;
         }
 
+        input:hover,
+        textarea:hover,
+        select:hover {
+            border-color: rgba(var(--ink-rgb), 0.18);
+        }
+
         input:focus,
         textarea:focus,
         select:focus {
             border-color: var(--border-focus);
-            box-shadow: 0 0 0 3px var(--accent-glow);
+            box-shadow: 0 0 0 3px var(--accent-glow-strong);
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: rgba(var(--ink-rgb), 0.35);
+        }
+
+        input[type="range"],
+        input[type="checkbox"],
+        input[type="radio"] {
+            accent-color: var(--accent);
+            box-shadow: none;
+        }
+
+        input[type="range"] {
+            background: transparent;
+            border: none;
         }
 
         textarea {
@@ -500,35 +708,39 @@
             justify-content: center;
             gap: 8px;
             padding: 10px 22px;
-            border-radius: var(--radius-sm);
+            border-radius: 999px;
             font-family: inherit;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            border: none;
+            border: 1px solid transparent;
             transition: all 0.2s ease;
-            letter-spacing: 0.3px;
+            white-space: nowrap;
         }
 
+        /* Landing .btn--primary / .btn--secondary (light theme pills). */
         .btn-primary {
-            background: var(--accent);
-            color: #000;
+            background: var(--accent-grad);
+            color: #fff;
+            box-shadow: var(--shadow-btn);
         }
 
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            box-shadow: 0 4px 20px var(--accent-glow-strong), 0 0 40px var(--accent-glow);
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-btn-hover);
         }
 
         .btn-secondary {
-            background: transparent;
+            background: var(--bg-card);
             color: var(--text-primary);
             border: 1px solid var(--border);
+            box-shadow: 0 1px 2px rgba(46, 32, 98, 0.06);
         }
 
-        .btn-secondary:hover {
-            border-color: var(--accent);
+        .btn-secondary:hover:not(:disabled) {
+            border-color: var(--border-hover);
             color: var(--accent);
+            box-shadow: 0 6px 16px -6px rgba(46, 32, 98, 0.18);
         }
 
         .btn-sm {
@@ -552,18 +764,20 @@
         }
 
         .btn-icon:hover {
-            border-color: var(--accent);
+            border-color: var(--border-hover);
             color: var(--accent);
+            background: var(--accent-glow);
         }
 
         .btn-danger {
-            background: var(--error);
-            color: white;
+            background: #dc2626;
+            color: #fff;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(220, 38, 38, 0.45);
         }
 
-        .btn-danger:hover {
-            background: #dc2626;
-            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
+        .btn-danger:hover:not(:disabled) {
+            background: #b91c1c;
+            transform: translateY(-1px);
         }
 
         .btn:disabled {
@@ -597,7 +811,7 @@
         }
 
         .tab:hover {
-            color: var(--text-secondary);
+            color: var(--text-primary);
         }
 
         .tab.active {
@@ -637,13 +851,13 @@
 
         td {
             padding: 12px 14px;
-            border-bottom: 1px solid rgba(26, 26, 37, 0.5);
+            border-bottom: 1px solid var(--border-soft);
             font-size: 13px;
             color: var(--text-secondary);
         }
 
         tr:hover td {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(var(--accent-rgb), 0.04);
         }
 
         tr.expandable {
@@ -706,21 +920,21 @@
             font-weight: 500;
             animation: toast-in 0.3s ease;
             min-width: 280px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            box-shadow: var(--shadow-pop);
             backdrop-filter: blur(10px);
             font-family: var(--font-mono);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-left-width: 3px;
         }
 
         .toast-success {
-            background: rgba(6, 78, 59, 0.9);
-            color: #a7f3d0;
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-left-color: var(--success);
         }
 
         .toast-error {
-            background: rgba(127, 29, 29, 0.9);
-            color: #fca5a5;
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-left-color: var(--error);
         }
 
         @keyframes toast-in {
@@ -754,8 +968,8 @@
         }
 
         .chat-msg.user {
-            background: var(--accent);
-            color: #000;
+            background: var(--accent-grad);
+            color: #fff;
             align-self: flex-end;
             border-bottom-right-radius: 4px;
             font-weight: 500;
@@ -839,8 +1053,8 @@
             align-items: center;
             gap: 16px;
             padding: 14px 20px;
-            background: linear-gradient(90deg, var(--accent-glow), rgba(99, 102, 241, 0.05));
-            border: 1px solid rgba(6, 182, 212, 0.15);
+            background: linear-gradient(90deg, var(--accent-glow), var(--indigo-glow));
+            border: 1px solid rgba(var(--accent-rgb), 0.18);
             border-radius: var(--radius-sm);
             margin-bottom: 16px;
         }
@@ -866,6 +1080,7 @@
             border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 24px;
+            box-shadow: var(--shadow-card);
         }
 
         .chart-box canvas {
@@ -880,10 +1095,12 @@
             padding: 24px;
             margin-bottom: 16px;
             transition: all 0.25s ease;
+            box-shadow: var(--shadow-card);
         }
 
         .conflict-card:hover {
             border-color: var(--border-hover);
+            box-shadow: var(--shadow-card-hover);
         }
 
         .conflict-header {
@@ -995,16 +1212,18 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
+            box-shadow: var(--shadow-card);
         }
 
         .conn-card:hover {
             border-color: var(--border-hover);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-card-hover);
         }
 
         .conn-card.active {
             border-color: var(--accent);
-            box-shadow: 0 0 0 1px var(--accent), 0 8px 30px var(--accent-glow);
+            box-shadow: 0 0 0 1px var(--accent), 0 14px 32px -12px var(--accent-glow-strong);
         }
 
         .conn-card.muted {
@@ -1091,8 +1310,8 @@
         }
 
         .conn-project-row.missing {
-            border-color: rgba(245, 158, 11, 0.3);
-            background: rgba(245, 158, 11, 0.05);
+            border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+            background: var(--warning-bg);
         }
 
         .conn-project-path {
@@ -1106,8 +1325,8 @@
             display: flex;
             gap: 8px;
             align-items: center;
-            background: rgba(239, 68, 68, 0.08);
-            border: 1px solid rgba(239, 68, 68, 0.25);
+            background: var(--error-bg);
+            border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
             border-radius: var(--radius-sm);
             padding: 10px 14px;
             margin: 6px 0;
@@ -1124,6 +1343,7 @@
             margin-bottom: 22px;
             position: relative;
             overflow: hidden;
+            box-shadow: var(--shadow-card);
         }
 
         .mesh-head {
@@ -1169,7 +1389,7 @@
         }
 
         .mesh-edge.live {
-            stroke: var(--accent);
+            stroke: var(--cyan);
             stroke-width: 1.5;
             opacity: 0.55;
         }
@@ -1185,14 +1405,18 @@
             z-index: 2;
         }
 
-        /* The logo sits bare on the panel - no ring, no plate, no rounding.
-           agentLogo() paints a per-agent background inline, so !important is
-           what actually removes it. */
-        .mesh-node .agent-logo {
+        /* Dark theme: the logo sits bare on the panel - no ring, no plate, no
+           rounding. agentLogo() paints a per-agent background inline, so
+           !important is what actually removes it. On the light theme the plate
+           stays: several logos are white glyphs that vanish on a white card. */
+        :root[data-theme="dark"] .mesh-node .agent-logo {
             background: transparent !important;
             border: none !important;
             border-radius: 0;
             box-shadow: none;
+        }
+
+        .mesh-node .agent-logo {
             transition: transform 0.2s ease;
         }
 
@@ -1230,9 +1454,9 @@
             width: 96px;
             height: 96px;
             border-radius: 50%;
-            background: radial-gradient(circle at 50% 40%, #0d1b20, var(--bg-card));
-            border: 1px solid var(--accent);
-            box-shadow: 0 0 40px var(--accent-glow);
+            background: radial-gradient(circle at 50% 40%, var(--accent-glow), var(--bg-card));
+            border: 1px solid var(--cyan);
+            box-shadow: 0 0 40px rgba(0, 210, 254, 0.18);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -1246,7 +1470,7 @@
         .mesh-hub .hub-ant {
             height: 38px;
             width: auto;
-            color: #9d7ad6;
+            color: var(--accent);
         }
 
         .mesh-hub .hub-ant-legs {
@@ -1412,7 +1636,7 @@
             margin-left: 8px;
         }
 
-        .sess-tools .agent-logo {
+        :root[data-theme="dark"] .sess-tools .agent-logo {
             background: transparent !important;
             border: none !important;
             border-radius: 0;
@@ -1459,7 +1683,7 @@
         .modal-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.7);
+            background: var(--backdrop);
             backdrop-filter: blur(6px);
             z-index: 9000;
             display: flex;
@@ -1476,7 +1700,7 @@
             max-height: 88vh;
             overflow-y: auto;
             padding: 24px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            box-shadow: var(--shadow-pop);
         }
 
         .modal-header {
@@ -1531,7 +1755,7 @@
         }
 
         .agent-checkbox-row:hover {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(var(--ink-rgb), 0.04);
         }
 
         .agent-checkbox-row input {
@@ -1632,7 +1856,7 @@
         }
 
         .browser-crumb:hover {
-            background: rgba(6, 182, 212, 0.1);
+            background: var(--accent-glow);
         }
 
         .browser-crumb-sep {
@@ -1654,12 +1878,12 @@
             cursor: pointer;
             font-size: 13px;
             color: var(--text-secondary);
-            border-bottom: 1px solid rgba(26, 26, 37, 0.5);
+            border-bottom: 1px solid var(--border-soft);
             transition: background 0.12s ease;
         }
 
         .browser-list-item:hover {
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(var(--ink-rgb), 0.04);
             color: var(--text-primary);
         }
 
@@ -1731,9 +1955,9 @@
             }
 
             .sidebar-logo p,
-            .logo-stack,
+            .brand-word,
             .nav-item span,
-            .sidebar-footer,
+            .sidebar-status,
             .nav-badge {
                 display: none;
             }
@@ -1743,9 +1967,9 @@
                 justify-content: center;
             }
 
-            .sidebar-logo img {
-                width: 32px;
-                height: 32px;
+            .sidebar-footer {
+                padding: 12px 0;
+                justify-content: center;
             }
 
             .nav-item {
@@ -1753,11 +1977,16 @@
                 padding: 12px;
             }
 
+            .nav-item.active {
+                box-shadow: none;
+            }
+
             .main {
                 padding: 20px;
             }
 
-            .main::before {
+            .main::before,
+            .main::after {
                 left: 56px;
             }
 
@@ -1782,6 +2011,7 @@
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             padding: 14px 16px;
+            box-shadow: var(--shadow-card);
         }
 
         .hh-stat-label {
@@ -1831,6 +2061,11 @@
         }
 
         .achv.locked .achv-badge {
+            filter: grayscale(1);
+            opacity: 0.4;
+        }
+
+        :root[data-theme="dark"] .achv.locked .achv-badge {
             filter: grayscale(1) brightness(0.55);
             opacity: 0.55;
         }
@@ -1875,10 +2110,12 @@
             width: max-content;
             max-width: min(540px, calc(100vw - 32px));
             padding: 18px 44px 18px 18px;
-            background: linear-gradient(135deg, rgba(24, 18, 44, 0.97), rgba(8, 8, 13, 0.97));
-            border: 1px solid rgba(157, 122, 214, 0.4);
+            background:
+                radial-gradient(ellipse 70% 100% at 0% 50%, var(--accent-glow), transparent 70%),
+                var(--bg-card);
+            border: 1px solid rgba(var(--accent-rgb), 0.35);
             border-radius: var(--radius);
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 44px rgba(157, 122, 214, 0.2);
+            box-shadow: var(--shadow-pop), 0 0 44px rgba(var(--accent-rgb), 0.18);
             font-family: var(--font-mono);
             animation: celIn 0.55s cubic-bezier(0.2, 1.3, 0.4, 1) both;
         }
@@ -1911,7 +2148,7 @@
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.09) 50%, transparent 65%);
+            background: linear-gradient(105deg, transparent 35%, rgba(var(--accent-rgb), 0.1) 50%, transparent 65%);
             transform: translateX(-100%);
             animation: celShine 1.4s 0.35s ease forwards;
         }
@@ -1933,7 +2170,7 @@
         .cel-ant {
             width: 60px;
             height: auto;
-            color: #b69cf0;
+            color: var(--accent);
             overflow: visible;
             transform-origin: 50% 100%;
             animation: celJump 0.9s cubic-bezier(0.3, 0.7, 0.4, 1) 3;
@@ -1999,7 +2236,7 @@
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            color: #b69cf0;
+            color: var(--accent);
         }
 
         .cel-title {
@@ -2086,29 +2323,29 @@
         }
 
         .hh-cell[data-level="0"] {
-            background: #161b22;
-            outline: 1px solid rgba(255, 255, 255, 0.03);
+            background: var(--heat-0);
+            outline: 1px solid rgba(var(--ink-rgb), 0.04);
             outline-offset: -1px;
         }
 
         .hh-cell[data-level="1"] {
-            background: #0e4429;
+            background: var(--heat-1);
         }
 
         .hh-cell[data-level="2"] {
-            background: #006d32;
+            background: var(--heat-2);
         }
 
         .hh-cell[data-level="3"] {
-            background: #26a641;
+            background: var(--heat-3);
         }
 
         .hh-cell[data-level="4"] {
-            background: #39d353;
+            background: var(--heat-4);
         }
 
         .hh-cell:hover {
-            outline: 1px solid rgba(255, 255, 255, 0.6);
+            outline: 1px solid rgba(var(--ink-rgb), 0.6);
             outline-offset: 1px;
         }
 
@@ -2130,7 +2367,7 @@
             height: 5px;
             border-radius: 50%;
             background: var(--error);
-            box-shadow: 0 0 0 1px rgba(13, 17, 23, 0.85);
+            box-shadow: 0 0 0 1px var(--bg-card);
             pointer-events: none;
         }
 
@@ -2512,12 +2749,13 @@
             gap: 10px;
             position: relative;
             overflow: hidden;
+            box-shadow: var(--shadow-card);
         }
 
         .mig-tile:hover {
-            border-color: var(--accent);
+            border-color: var(--border-hover);
             transform: translateY(-2px);
-            box-shadow: 0 8px 32px var(--accent-glow);
+            box-shadow: var(--shadow-card-hover);
         }
 
         .mig-tile.selected {
@@ -2783,6 +3021,7 @@
             border-radius: 10px;
             padding: 18px;
             transition: all 0.2s;
+            box-shadow: var(--shadow-card);
         }
 
         .mig-stat:hover {
@@ -2870,9 +3109,16 @@
         <aside class="sidebar">
             <div class="sidebar-logo">
                 <div class="logo-stack">
-                    <a href="/" style="display: block;">
-                        <img src="/ui/static/logo.svg" alt="MEMANTO Logo"
-                            style="width: 150px; height: auto; object-fit: contain; filter: none; opacity: 1;">
+                    <a href="/" class="brand" aria-label="Memanto">
+                        <svg class="brand-ant" viewBox="0 0 96 120" fill="currentColor" aria-hidden="true">
+                            <path d="M 18,0 H 78 V 24 H 66 V 12 H 60 V 24 H 36 V 12 H 30 V 24 H 18 Z M 12,24 H 18 V 48 H 12 Z M 78,24 H 84 V 48 H 78 Z M 18,48 H 78 V 60 H 66 V 72 H 30 V 60 H 18 Z" />
+                            <polygon points="42,28 46,36 42,44 38,36" fill="none" stroke="currentColor" stroke-width="1.5" />
+                            <polygon points="42,32 44,36 42,40 40,36" />
+                            <polygon points="54,28 58,36 54,44 50,36" fill="none" stroke="currentColor" stroke-width="1.5" />
+                            <polygon points="54,32 56,36 54,40 52,36" />
+                            <path d="M 12,72 H 18 V 108 H 12 Z M 24,72 H 30 V 96 H 24 Z M 36,72 H 42 V 84 H 36 Z M 54,72 H 60 V 84 H 54 Z M 66,72 H 72 V 96 H 66 Z M 78,72 H 84 V 108 H 78 Z" />
+                        </svg>
+                        <span class="brand-word">Memanto</span>
                     </a>
                     <p>Memory Agent by <a href="https://moorcheh.ai" target="_blank">Moorcheh.ai</a></p>
                 </div>
@@ -2963,6 +3209,10 @@
                     <span class="status-dot" id="sidebarDot"></span>
                     <span id="sidebarStatus">Connecting...</span>
                 </div>
+                <button class="btn-icon theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Switch to dark mode" aria-label="Switch to dark mode">
+                    <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" /></svg>
+                    <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></svg>
+                </button>
             </div>
         </aside>
 
@@ -2971,15 +3221,14 @@
             <!-- DASHBOARD -->
             <section class="page active" id="page-dashboard">
                 <!-- Update Banner (Hidden by default) -->
-                <div id="templateUpdateBanner" style="display: none; background: #fff3cd; color: #856404; padding: 8px 16px; border-radius: 4px; margin: 0 0 16px 0; border: 1px solid #ffeeba; align-items: center; justify-content: space-between; font-size: 14px;">
+                <div id="templateUpdateBanner" style="display: none; background: var(--warning-bg); color: var(--text-secondary); padding: 10px 16px; border-radius: var(--radius-sm); margin: 0 0 16px 0; border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent); align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;">
                     <div>
-                        <span style="margin-right: 6px;">⚠️</span>
-                        <strong style="margin-right: 4px;">Agent Instruction Update Available</strong>
+                        <strong style="margin-right: 4px; color: var(--warning);">Agent Instruction Update Available</strong>
                         <span id="templateUpdateMsg">Your workspace is using outdated agent instructions.</span>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button onclick="dismissTemplateUpdate()" style="background: transparent; border: 1px solid #856404; color: #856404; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Dismiss</button>
-                        <button onclick="updateTemplates()" style="background: #856404; border: none; color: white; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Update Now</button>
+                        <button class="btn btn-secondary btn-sm" onclick="dismissTemplateUpdate()">Dismiss</button>
+                        <button class="btn btn-primary btn-sm" onclick="updateTemplates()">Update Now</button>
                     </div>
                 </div>
                 <div class="page-header">
@@ -2989,13 +3238,13 @@
                 </div>
                 <div class="cards-row" id="dashCards"></div>
                 <div class="panel">
-                    <div class="panel-title">🧠 Agent Profile</div>
+                    <div class="panel-title">Agent Profile</div>
                     <div id="agentProfile">
                         <div class="loading-overlay"><span class="spinner"></span> Loading...</div>
                     </div>
                 </div>
                 <div class="panel">
-                    <div class="panel-title">📊 Session Info</div>
+                    <div class="panel-title">Session Info</div>
                     <div id="sessionInfo">
                         <div class="loading-overlay"><span class="spinner"></span> Loading...</div>
                     </div>
@@ -3206,7 +3455,7 @@
                     <button class="btn btn-primary btn-sm" id="btnDetectConflicts" onclick="detectConflictsNow()">⚡ Detect Conflicts Now</button>
                     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
                         <label for="conflictsDateInput" style="color:var(--text-dim);font-size:13px">Date</label>
-                        <input type="date" id="conflictsDateInput" onchange="loadConflicts()" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:13px">
+                        <input type="date" id="conflictsDateInput" onchange="loadConflicts()" style="width:auto;padding:6px 10px">
                     </div>
                 </div>
                 <div id="conflictsContent">
@@ -3344,6 +3593,34 @@
         }
 
         // Toast
+        // ================================================================
+        // THEME
+        // ================================================================
+        function syncThemeToggle() {
+            const btn = document.getElementById('themeToggle');
+            const label = document.documentElement.dataset.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+            btn.title = label;
+            btn.setAttribute('aria-label', label);
+        }
+
+        function toggleTheme() {
+            const root = document.documentElement;
+            const dark = root.dataset.theme !== 'dark';
+            if (dark) root.dataset.theme = 'dark';
+            else delete root.dataset.theme;
+            try { localStorage.setItem('memanto-theme', dark ? 'dark' : 'light'); } catch (e) { }
+            syncThemeToggle();
+            // Chart.js bakes colours in at creation, so redraw the open charts.
+            if (S.history && S.history.length && document.getElementById('page-analytics').classList.contains('active')) {
+                renderAnalyticsCards(document.getElementById('analyticsCards'), S.history);
+            }
+        }
+
+        // Resolved value of a CSS custom property for the current theme.
+        function cssVar(name) {
+            return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        }
+
         function toast(msg, type = 'success') {
             const el = document.createElement('div');
             el.className = `toast toast-${type}`;
@@ -3516,6 +3793,7 @@
             } catch (e) {
                 console.warn('Config load failed:', e);
             }
+            syncThemeToggle();
             applyBackendVisibility();
             updateSidebarStatus();
             achvInit();
@@ -5253,7 +5531,7 @@
             <!-- BACKEND / API KEY -->
             ${onPrem ? `
             <div class="panel">
-                <div class="panel-title">🖥️ Backend</div>
+                <div class="panel-title">Backend</div>
                 <table class="config-table" style="width:100%"><tbody>
                 <tr><td>Mode</td><td><span class="badge badge-success">On-Prem</span></td></tr>
                 <tr><td>Server URL</td><td><code style="font-family:var(--font-mono)">${escHtml(onPremCfg.url || 'http://localhost:8080')}</code></td></tr>
@@ -5264,7 +5542,7 @@
             </div>
             ` : `
             <div class="panel">
-                <div class="panel-title">🔑 API Key</div>
+                <div class="panel-title">API Key</div>
                 <div id="apiKeyRow">
                     ${c.api_key_configured ?
                         `<div class="api-key-display">
@@ -5284,7 +5562,7 @@
             `}
             <!-- STATUS (read-only) -->
             <div class="panel">
-                <div class="panel-title">📊 Status</div>
+                <div class="panel-title">Status</div>
                 <table class="config-table" style="width:100%"><tbody>
                 <tr><td>Active Agent</td><td><strong style="color:var(--accent)">${c.active_agent_id || '—'}</strong></td></tr>
                 <tr><td>Active Session</td><td>${c.has_active_session ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-warning">No</span>'}</td></tr>
@@ -5293,7 +5571,7 @@
             </div>
             <!-- SERVER -->
             <div class="panel">
-                <div class="panel-title">🖥️ Server</div>
+                <div class="panel-title">Server</div>
                 <div class="form-row">
                     <div class="form-group"><label>Host / URL</label><input id="cfgServerUrl" value="${srv.url || 'localhost'}"></div>
                     <div class="form-group"><label>Port</label><input type="number" id="cfgServerPort" value="${srv.port || 8000}" min="1" max="65535"></div>
@@ -5301,7 +5579,7 @@
             </div>
             <!-- SESSION MANAGEMENT -->
             <div class="panel">
-                <div class="panel-title">⏱️ Session Management</div>
+                <div class="panel-title">Session Management</div>
                 <div class="form-row">
                     <div class="form-group"><label>Default Duration (hours)</label><input type="number" id="cfgSessDuration" value="${sess.default_duration_hours ?? 6}" min="1" max="72"></div>
                     <div class="form-group"><label>Extend Threshold (minutes)</label><input type="number" id="cfgSessExtendThreshold" value="${sess.extend_threshold_minutes ?? 30}" min="1" max="120"></div>
@@ -5318,7 +5596,7 @@
             <!-- ANSWER CONFIG -->
             ${onPrem ? `
             <div class="panel">
-                <div class="panel-title">🤖 LLM Config (On-Prem)</div>
+                <div class="panel-title">LLM Config (On-Prem)</div>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Provider</label>
@@ -5346,7 +5624,7 @@
             </div>
             ` : `
             <div class="panel">
-                <div class="panel-title">🤖 Answer Config</div>
+                <div class="panel-title">Answer Config</div>
                 <div class="form-group"><label>Model</label><input id="cfgAiModel" value="${ans.model || 'anthropic.claude-sonnet-4-20250514-v1:0'}" placeholder="e.g. anthropic.claude-sonnet-4-20250514-v1:0"></div>
                 <div class="form-row">
                     <div class="form-group"><label>Temperature</label><input type="number" id="cfgAiTemp" value="${ans.temperature ?? 0.7}" min="0" max="2" step="0.05"></div>
@@ -5363,7 +5641,7 @@
             `}
             <!-- TOP N LIMIT -->
             <div class="panel">
-                <div class="panel-title">🎯 Search & Retrieval</div>
+                <div class="panel-title">Search & Retrieval</div>
                 <div class="form-row">
                     <div class="form-group"><label>Recall Limit (search results)</label><input type="number" id="cfgRecallLimit" value="${rec.limit ?? 10}" min="1" max="100"></div>
                     <div class="form-group"><label>Recall Min Similarity (0.0-1.0)</label><input type="number" step="0.01" id="cfgRecallMinSimilarity" value="${rec.min_similarity ?? 0}" min="0" max="1"></div>
@@ -5371,14 +5649,14 @@
             </div>
             <!-- CLI BEHAVIOR -->
             <div class="panel">
-                <div class="panel-title">⚡ CLI Behavior</div>
+                <div class="panel-title">CLI Behavior</div>
                 <div style="display:flex;flex-direction:column;gap:12px">
                     ${cfgToggle('cfgCliSmartParse', 'Smart parse (auto-assign memory type for raw input)', cli.smart_parse ?? true)}
                 </div>
             </div>
             <!-- SCHEDULE -->
             <div class="panel">
-                <div class="panel-title">📅 Schedule</div>
+                <div class="panel-title">Schedule</div>
                 <div class="form-group"><label>Daily Summary + Conflict Scan Time (HH:MM)</label><input id="cfgSchedule" value="${c.schedule_time || '23:55'}" placeholder="HH:MM" style="width:120px"></div>
             </div>
             <!-- SAVE -->
@@ -6476,8 +6754,13 @@
             <div class="card"><div class="card-label">Avg Confidence</div><div class="card-value ${confClass(avgConf)}">${avgConf.toFixed(2)}</div></div>
         `;
 
-            const colors = ['#06b6d4', '#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6', '#f97316'];
-            const sourceColors = ['#ec4899', '#f97316', '#8b5cf6', '#06b6d4', '#22c55e'];
+            // Brand-led palette: Memanto purple and cyan first, then supporting hues.
+            const colors = ['#6b4ead', '#00b4d8', '#9d7ad6', '#22c55e', '#f59e0b', '#ec4899', '#0e7490'];
+            const sourceColors = ['#9d7ad6', '#00b4d8', '#6b4ead', '#f59e0b', '#22c55e'];
+            const tick = cssVar('--chart-tick');
+            const gridColor = cssVar('--chart-grid');
+            const chartFont = { family: "'JetBrains Mono', monospace" };
+            const sliceBorder = cssVar('--bg-card');
 
             if (S.charts.usage) S.charts.usage.destroy();
             if (S.charts.type) S.charts.type.destroy();
@@ -6489,26 +6772,26 @@
 
             S.charts.usage = new Chart(document.getElementById('chartUsage'), {
                 type: 'line',
-                data: { labels: sortedDates, datasets: [{ label: 'Memories Created', data: usageData, borderColor: '#6366f1', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderWidth: 2, fill: true, tension: 0.3, pointBackgroundColor: '#6366f1' }] },
-                options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8a8a9a', font: { family: 'Inter' } }, grid: { color: 'rgba(26,26,37,0.5)' } }, y: { ticks: { color: '#8a8a9a', font: { family: 'Inter' }, stepSize: 1 }, grid: { color: 'rgba(26,26,37,0.5)' }, beginAtZero: true } } }
+                data: { labels: sortedDates, datasets: [{ label: 'Memories Created', data: usageData, borderColor: '#7a5cc0', backgroundColor: 'rgba(122, 92, 192, 0.12)', borderWidth: 2, fill: true, tension: 0.3, pointBackgroundColor: '#7a5cc0' }] },
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: tick, font: chartFont }, grid: { color: gridColor } }, y: { ticks: { color: tick, font: chartFont, stepSize: 1 }, grid: { color: gridColor }, beginAtZero: true } } }
             });
 
             S.charts.type = new Chart(document.getElementById('chartType'), {
                 type: 'doughnut',
-                data: { labels: Object.keys(typeCounts), datasets: [{ data: Object.values(typeCounts), backgroundColor: colors.slice(0, Object.keys(typeCounts).length), borderWidth: 0 }] },
-                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#8a8a9a', padding: 16, font: { family: 'Inter' } } } } }
+                data: { labels: Object.keys(typeCounts), datasets: [{ data: Object.values(typeCounts), backgroundColor: colors.slice(0, Object.keys(typeCounts).length), borderWidth: 2, borderColor: sliceBorder }] },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: tick, padding: 16, font: chartFont } } } }
             });
 
             S.charts.source = new Chart(document.getElementById('chartSource'), {
                 type: 'doughnut',
-                data: { labels: Object.keys(sourceBuckets), datasets: [{ data: Object.values(sourceBuckets), backgroundColor: sourceColors.slice(0, Object.keys(sourceBuckets).length), borderWidth: 0 }] },
-                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#8a8a9a', padding: 16, font: { family: 'Inter' } } } } }
+                data: { labels: Object.keys(sourceBuckets), datasets: [{ data: Object.values(sourceBuckets), backgroundColor: sourceColors.slice(0, Object.keys(sourceBuckets).length), borderWidth: 2, borderColor: sliceBorder }] },
+                options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: tick, padding: 16, font: chartFont } } } }
             });
 
             S.charts.conf = new Chart(document.getElementById('chartConf'), {
                 type: 'bar',
                 data: { labels: Object.keys(confBuckets), datasets: [{ label: 'Memories', data: Object.values(confBuckets), backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'], borderRadius: 8, borderWidth: 0 }] },
-                options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8a8a9a', font: { family: 'Inter' } }, grid: { display: false } }, y: { ticks: { color: '#8a8a9a', font: { family: 'Inter' } }, grid: { color: 'rgba(26,26,37,0.5)' } } } }
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: tick, font: chartFont }, grid: { display: false } }, y: { ticks: { color: tick, font: chartFont }, grid: { color: gridColor } } } }
             });
 
             // Generate Word Cloud
@@ -6523,7 +6806,7 @@
                     const ratio = count / maxCount; // 0.0 to 1.0
                     const size = Math.max(11, 11 + ratio * 18); // 11px to 29px
                     const opacity = Math.max(0.4, ratio); // 0.4 to 1.0
-                    cloudHtml += `<span title="${count} memories" style="font-size:${size}px;color:rgba(6,182,212,${opacity});font-weight:600;font-family:var(--font-mono);border:1px solid rgba(6,182,212,${opacity*0.3});padding:4px 12px;border-radius:20px;background:rgba(6,182,212,${opacity*0.05});background-clip:padding-box;line-height:1;margin:4px">${escHtml(tag)} <small style="font-size:0.65em;opacity:0.7">(${count})</small></span>`;
+                    cloudHtml += `<span title="${count} memories" style="font-size:${size}px;color:rgba(var(--accent-rgb),${opacity});font-weight:600;font-family:var(--font-mono);border:1px solid rgba(var(--accent-rgb),${opacity*0.3});padding:4px 12px;border-radius:20px;background:rgba(var(--accent-rgb),${opacity*0.06});background-clip:padding-box;line-height:1;margin:4px">${escHtml(tag)} <small style="font-size:0.65em;opacity:0.7">(${count})</small></span>`;
                 });
                 cloudHtml += '</div>';
                 tagsContainer.innerHTML = cloudHtml;
