@@ -13,6 +13,7 @@ from typing import Any
 
 from memanto.cli.config.manager import ConfigManager
 from memanto.cli.connect.agent_registry import AGENT_REGISTRY, AgentDef
+from memanto.cli.connect.mcp_setup import install_mcp, remove_mcp
 from memanto.cli.connect.templates import (
     MEMANTO_DYNAMIC_SENTINEL,
     MEMANTO_DYNAMIC_SENTINEL_END,
@@ -73,11 +74,31 @@ def install_agent(
     except Exception as e:
         errors.append(f"Instruction file: {e}")
 
-    # Skill deployment
+    # MCP server (Claude Code, Codex, Cursor): memanto tools for the agent
+    mcp_ready = False
+    if agent.mcp_client:
+        try:
+            mcp_result = install_mcp(
+                agent.mcp_client, project_path, is_global, _active_agent_id()
+            )
+            mcp_ready = mcp_result is None or not mcp_result.startswith("Skipped")
+            if mcp_result:
+                steps.append(mcp_result)
+        except Exception as e:
+            errors.append(f"MCP server: {e}")
+
+    # Skill deployment. With the MCP tools available the CLI skill is left out:
+    # agents that load skills (e.g. Codex) otherwise follow it and run memanto
+    # shell commands instead of calling the tools.
     try:
-        skill_result = _install_skill(agent, project_path, is_global)
-        if skill_result:
-            steps.append(skill_result)
+        if mcp_ready:
+            skill_result = _remove_skill(agent, project_path, is_global)
+            if skill_result:
+                steps.append(skill_result + " (memanto MCP tools are used instead)")
+        else:
+            skill_result = _install_skill(agent, project_path, is_global)
+            if skill_result:
+                steps.append(skill_result)
     except Exception as e:
         errors.append(f"Skill deployment: {e}")
 
@@ -170,6 +191,15 @@ def remove_agent(
                 steps.append(perm_result)
         except Exception as e:
             errors.append(f"Permission removal: {e}")
+
+    # Remove MCP server entry added by MEMANTO
+    if agent.mcp_client:
+        try:
+            result = remove_mcp(agent.mcp_client, project_path, is_global)
+            if result:
+                steps.append(result)
+        except Exception as e:
+            errors.append(f"MCP server removal: {e}")
 
     # Remove code extension (agent-specific)
     if agent.extension_file:
@@ -761,6 +791,15 @@ def _remove_permissions(
 
 
 # Utilities
+
+
+def _active_agent_id() -> str | None:
+    """The memanto agent currently active in the CLI, used as the MCP default."""
+    try:
+        agent_id, _token = ConfigManager().get_active_session()
+    except Exception:
+        return None
+    return agent_id or None
 
 
 def _display_path(path: Path, is_global: bool) -> str:
