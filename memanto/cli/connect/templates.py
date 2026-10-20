@@ -195,12 +195,11 @@ def _base_instruction_content(agent_id: str = "<agent_name>") -> str:
 This project uses Memanto for long-term memory across sessions.
 
 - Use Memanto for anything worth remembering across sessions. Don't use other memory files or notes for this.
-- Use the `memanto` MCP tools (`recall`, `remember`) for this. Only if those tools are not available, run the CLI instead: `memanto recall "<query>" --tool {agent_id}` and `memanto remember "<short statement>" --type <type> --source {agent_id}`.
+- Use the `memanto` MCP tools (`recall`, `remember`) for this. If you don't have them, use the `memanto` command line as described in the `memanto-memory` skill, identifying yourself with `--tool {agent_id}`.
 - At the start of any new task, recall before reading files, writing code or running commands, to pick up the user's rules, preferences and earlier decisions. Also recall when the user refers to earlier work, or before asking something the user may have told you before.
 - Remember right away, before continuing with the task, when the user shares something durable: a rule, a preference, a decision, a goal, a fact about the project, or a lesson from a fix. Save it as a short general statement ("Use Python for all code"), not a chat log.
 - Skip memory for small talk and one-off requests.
 - Just use the tools or commands; there's no need to mention memory checks in replies.
-- For memory types, tags and the full command reference, see the `memanto-memory` skill if it is installed.
 
 {MEMANTO_SENTINEL_END}
 

@@ -32,6 +32,14 @@ _CODEX_BLOCK_RE = re.compile(
     re.escape(CODEX_BLOCK_START) + r".*?" + re.escape(CODEX_BLOCK_END) + r"\n?",
     re.DOTALL,
 )
+CODEX_ENV_VARS = (
+    "USERPROFILE",
+    "HOME",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+)
 _CODEX_SERVER_RE = re.compile(r"(?m)^\s*\[mcp_servers\.memanto(\]|\.)")
 
 
@@ -155,6 +163,10 @@ def _install_codex(command: str, args: list[str], agent_id: str) -> str | None:
             f"args = [{', '.join(_toml_str(a) for a in args)}]",
             # Run memanto tools without an approval prompt for each call.
             'default_tools_approval_mode = "approve"',
+            # Codex starts MCP servers with a minimal environment; without the
+            # home variables memanto-mcp can't find ~/.memanto/.env (the key)
+            # and Codex silently drops the server's tools.
+            f"env_vars = [{', '.join(_toml_str(v) for v in CODEX_ENV_VARS)}]",
             "",
             f"[mcp_servers.{SERVER_NAME}.env]",
             f"MEMANTO_DEFAULT_AGENT_ID = {_toml_str(agent_id)}",

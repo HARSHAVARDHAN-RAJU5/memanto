@@ -59,9 +59,11 @@ def test_instruction_text_is_shared_and_safe(agent_name):
 
     assert f"memanto-template-version: {TEMPLATE_VERSION}" in content
     assert "Use the `memanto` MCP tools" in content
-    assert "Only if those tools are not available" in content
-    assert f"--tool {agent_name}" in content
-    assert f"--source {agent_name}" in content
+    assert "If you don't have them, use the `memanto` command line" in content
+    # No ready-made CLI commands: agents that can use the tools should not be
+    # pulled toward shell commands (Codex prefers them when they are shown).
+    assert 'memanto remember "' not in content
+    assert 'memanto recall "' not in content
     # Nothing that asks the model to write out its reasoning or forces an
     # evaluation step before every reply.
     lowered = content.lower()
@@ -73,9 +75,7 @@ def test_instruction_text_differs_only_by_agent_id():
     def core(name):
         text = get_instruction_content(name)
         text = text[text.index("## MEMANTO") :]
-        return text.replace(f"--tool {name}", "--tool <agent>").replace(
-            f"--source {name}", "--source <agent>"
-        )
+        return text.replace(f"--tool {name}", "--tool <agent>")
 
     texts = {core(name) for name in AGENT_REGISTRY}
     assert len(texts) == 1
@@ -159,6 +159,7 @@ def test_codex_adds_managed_block_with_auto_approval(env):
     assert "[mcp_servers.memanto]" in text
     assert 'default_tools_approval_mode = "approve"' in text
     assert f'MEMANTO_DEFAULT_AGENT_ID = "{AGENT}"' in text
+    assert 'env_vars = ["USERPROFILE", "HOME"' in text
     assert "MOORCHEH_API_KEY" not in text
     assert text.startswith('model = "x"\n\n[projects.foo]')
 
@@ -168,6 +169,7 @@ def test_codex_adds_managed_block_with_auto_approval(env):
         tomllib = pytest.importorskip("tomli")
     parsed = tomllib.loads(text)
     assert parsed["mcp_servers"]["memanto"]["command"] == "memanto-mcp"
+    assert "USERPROFILE" in parsed["mcp_servers"]["memanto"]["env_vars"]
 
 
 def test_codex_local_remove_keeps_shared_entry_global_remove_drops_it(env):
