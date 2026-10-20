@@ -243,11 +243,15 @@ def describe_mcp(tool: str, tool_input: dict, output: str) -> str | None:
         article = "an" if str(kind)[:1].lower() in "aeiou" else "a"
         return f"stored {article} {kind}"
     if tool == "batch_remember":
-        items = tool_input.get("memories")
-        count = len(items) if isinstance(items, list) else None
-        if count is None:
-            return "stored memories"
-        return f"stored {count} " + ("memory" if count == 1 else "memories")
+        # Report what the server actually stored, not what was submitted.
+        try:
+            result = json.loads(output)
+        except (ValueError, TypeError):
+            result = None
+        stored = result.get("successful") if isinstance(result, dict) else None
+        if not isinstance(stored, int) or stored <= 0:
+            return None
+        return f"stored {stored} " + ("memory" if stored == 1 else "memories")
     if tool.startswith("recall"):
         found = _count_memories(output)
         if found is None:
@@ -268,7 +272,9 @@ def main() -> None:
         tool_name = str(payload.get("tool_name") or "")
         if tool_name.startswith(MCP_PREFIX):
             response = _plain(payload.get("tool_response"))
-            if not _claim("posttooluse:" + tool_name + ":" + response[:200]):
+            call_key = str(payload.get("tool_use_id") or response[:200])
+            session = str(payload.get("session_id") or "")
+            if not _claim(f"posttooluse:{session}:{tool_name}:{call_key}"):
                 return
             tool_input = payload.get("tool_input")
             _emit(

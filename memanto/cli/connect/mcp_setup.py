@@ -45,8 +45,11 @@ _CODEX_SERVER_RE = re.compile(r"(?m)^\s*\[mcp_servers\.memanto(\]|\.)")
 
 def server_command() -> tuple[str, list[str]] | None:
     """How clients should start memanto-mcp, or None if it isn't installed."""
-    if shutil.which("memanto-mcp"):
-        return "memanto-mcp", []
+    # Store the resolved path: clients often start servers with a different
+    # PATH than the shell running connect (GUI-launched Cursor, Codex).
+    resolved = shutil.which("memanto-mcp")
+    if resolved:
+        return str(Path(resolved).resolve()), []
     if importlib.util.find_spec("memanto_mcp") is not None:
         return sys.executable, ["-m", "memanto_mcp"]
     return None
@@ -83,6 +86,13 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     elif path.exists():
         path.unlink()
+
+
+def _check_local(project_path: Path, target: Path, is_global: bool) -> None:
+    """Same fail-closed project-root check the rest of connect uses."""
+    from memanto.cli.connect.engine import _assert_local_write_scope
+
+    _assert_local_write_scope(project_path, target, is_global)
 
 
 # JSON clients (Claude Code .mcp.json / ~/.claude.json, Cursor mcp.json)
@@ -182,8 +192,19 @@ def _install_codex(command: str, args: list[str], agent_id: str) -> str | None:
         new_text = base + ("\n" if base else "") + block
     if new_text == text:
         return None
+    old_block = _CODEX_BLOCK_RE.search(text)
+    old_agent = (
+        re.search(r'MEMANTO_DEFAULT_AGENT_ID = "([^"]*)"', old_block.group(0))
+        if old_block
+        else None
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(new_text, encoding="utf-8")
+    if old_agent and old_agent.group(1) != agent_id:
+        return (
+            "Updated memanto MCP server in ~/.codex/config.toml: agent changed from "
+            f"'{old_agent.group(1)}' to '{agent_id}' for every Codex project"
+        )
     return "Added memanto MCP server to ~/.codex/config.toml"
 
 
@@ -225,14 +246,20 @@ def install_mcp(
             return _install_json_server(
                 Path.home() / ".claude.json", "mcpServers", entry
             )
-        result = _install_json_server(project_path / ".mcp.json", "mcpServers", entry)
-        _claude_enable_project_server(
-            project_path / ".claude" / "settings.local.json", enable=True
-        )
+        mcp_json = project_path / ".mcp.json"
+        settings = project_path / ".claude" / "settings.local.json"
+        _check_local(project_path, mcp_json, is_global)
+        _check_local(project_path, settings, is_global)
+        result = _install_json_server(mcp_json, "mcpServers", entry)
+        # Only pre-approve the entry connect owns, never a user's own server.
+        if result is None or not result.startswith("Kept"):
+            _claude_enable_project_server(settings, enable=True)
         return result
     if client == "cursor":
         base = Path.home() if is_global else project_path
-        return _install_json_server(base / ".cursor" / "mcp.json", "mcpServers", entry)
+        target = base / ".cursor" / "mcp.json"
+        _check_local(project_path, target, is_global)
+        return _install_json_server(target, "mcpServers", entry)
     if client == "codex":
         # Codex reads MCP servers only from the user config, for every project.
         return _install_codex(command, args, agent_id)
@@ -244,14 +271,20 @@ def remove_mcp(client: str, project_path: Path, is_global: bool) -> str | None:
     if client == "claude":
         if is_global:
             return _remove_json_server(Path.home() / ".claude.json", "mcpServers")
-        result = _remove_json_server(project_path / ".mcp.json", "mcpServers")
+        mcp_json = project_path / ".mcp.json"
         settings = project_path / ".claude" / "settings.local.json"
-        if settings.exists():
+        _check_local(project_path, mcp_json, is_global)
+        _check_local(project_path, settings, is_global)
+        result = _remove_json_server(mcp_json, "mcpServers")
+        # Only withdraw the approval when connect's own entry was removed.
+        if result and settings.exists():
             _claude_enable_project_server(settings, enable=False)
         return result
     if client == "cursor":
         base = Path.home() if is_global else project_path
-        return _remove_json_server(base / ".cursor" / "mcp.json", "mcpServers")
+        target = base / ".cursor" / "mcp.json"
+        _check_local(project_path, target, is_global)
+        return _remove_json_server(target, "mcpServers")
     if client == "codex":
         # The Codex entry is shared by every project, so only a global remove
         # takes it out; removing one project must not break the others.

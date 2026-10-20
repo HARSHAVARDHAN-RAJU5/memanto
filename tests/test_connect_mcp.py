@@ -9,6 +9,7 @@ from memanto.cli.connect.agent_registry import AGENT_REGISTRY
 from memanto.cli.connect.templates import TEMPLATE_VERSION, get_instruction_content
 
 AGENT = "test-agent"
+MCP_PATH = str(Path("/bin/memanto-mcp").resolve())
 
 
 class StubConfigManager:
@@ -95,7 +96,7 @@ def test_claude_local_registers_server_without_api_key(env):
 
     assert result["errors"] == []
     entry = read_json(project / ".mcp.json")["mcpServers"]["memanto"]
-    assert entry["command"] == "memanto-mcp"
+    assert entry["command"] == MCP_PATH
     assert entry["env"]["MEMANTO_DEFAULT_AGENT_ID"] == AGENT
     settings = read_json(project / ".claude" / "settings.local.json")
     assert "memanto" in settings["enabledMcpjsonServers"]
@@ -168,7 +169,7 @@ def test_codex_adds_managed_block_with_auto_approval(env):
     except ModuleNotFoundError:  # Python 3.10
         tomllib = pytest.importorskip("tomli")
     parsed = tomllib.loads(text)
-    assert parsed["mcp_servers"]["memanto"]["command"] == "memanto-mcp"
+    assert parsed["mcp_servers"]["memanto"]["command"] == MCP_PATH
     assert "USERPROFILE" in parsed["mcp_servers"]["memanto"]["env_vars"]
 
 
@@ -274,8 +275,14 @@ def test_notify_describes_mcp_tools(notify):
         == "stored an instruction"
     )
     assert (
-        notify.describe_mcp("batch_remember", {"memories": [1, 2]}, "")
+        notify.describe_mcp(
+            "batch_remember", {"memories": [1, 2, 3]}, '{"successful": 2}'
+        )
         == "stored 2 memories"
+    )
+    assert (
+        notify.describe_mcp("batch_remember", {"memories": [1]}, '{"successful": 0}')
+        is None
     )
     assert notify.describe_mcp("recall", {}, '{"count": 3}') == "recalled 3 memories"
     assert notify.describe_mcp("recall", {}, "not json") == "searched memory"
@@ -310,3 +317,38 @@ def test_skill_still_installed_when_mcp_is_skipped(env):
     engine.install_agent("cursor", str(project))
 
     assert (project / ".cursor" / "skills" / "memanto" / "SKILL.md").exists()
+
+
+def test_server_command_is_absolute_path(env):
+    command, args = mcp_setup.server_command()
+    assert Path(command).is_absolute()
+    assert args == []
+
+
+def test_codex_reports_shared_agent_change(env):
+    _home, project = env
+    engine.install_agent("codex", str(project))
+    StubConfigManager.active = ("other-agent", "token")
+
+    result = engine.install_agent("codex", str(project))
+
+    assert any(
+        "agent changed from 'test-agent' to 'other-agent'" in s for s in result["steps"]
+    )
+
+
+def test_claude_does_not_approve_or_unapprove_user_server(env):
+    _home, project = env
+    own = {"mcpServers": {"memanto": {"command": "my-memanto"}}}
+    (project / ".mcp.json").write_text(json.dumps(own), encoding="utf-8")
+    settings = project / ".claude" / "settings.local.json"
+    settings.parent.mkdir()
+    settings.write_text(
+        json.dumps({"enabledMcpjsonServers": ["memanto"]}), encoding="utf-8"
+    )
+
+    engine.install_agent("claude-code", str(project))
+    assert read_json(settings)["enabledMcpjsonServers"] == ["memanto"]
+
+    engine.remove_agent("claude-code", str(project))
+    assert read_json(settings)["enabledMcpjsonServers"] == ["memanto"]
