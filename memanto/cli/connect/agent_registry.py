@@ -73,6 +73,10 @@ class AgentDef:
     extension_global_dir: str | None = None  # e.g. "~/.pi/agent/extensions"
     extension_local_dir: str | None = None  # e.g. ".pi/extensions"
 
+    # MCP client kind for registering memanto-mcp ("claude" | "codex" | "cursor").
+    # Agents without one keep using the CLI through the instruction text.
+    mcp_client: str | None = None
+
     def resolve_skill_local(self, project_dir: Path) -> Path:
         """Resolve local skill directory path."""
         if self.skill_local_dir:
@@ -138,7 +142,8 @@ CLAUDE_CODE = AgentDef(
         asset_file="hooks.json",
     ),
     permissions_file="settings.local.json",
-    permissions_payload={"permissions": {"allow": ["Bash(memanto:*)"]}},
+    permissions_payload={"permissions": {"allow": ["Bash(memanto:*)", "mcp__memanto"]}},
+    mcp_client="claude",
 )
 
 CODEX = AgentDef(
@@ -157,6 +162,7 @@ CODEX = AgentDef(
         hook_key="hooks.SessionStart",
         asset_file="codex-hooks.json",
     ),
+    mcp_client="codex",
 )
 
 PI = AgentDef(
@@ -190,6 +196,7 @@ CURSOR = AgentDef(
         hook_key="hooks.sessionStart",
         asset_file="cursor-hooks.json",
     ),
+    mcp_client="cursor",
 )
 
 WINDSURF = AgentDef(
