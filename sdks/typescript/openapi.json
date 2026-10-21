@@ -1,9 +1,9 @@
-﻿{
+{
   "openapi": "3.1.0",
   "info": {
     "title": "Memanto - Memory that AI Agents Love!",
     "description": "A memory layer service for agentic AI systems using Moorcheh SDK",
-    "version": "0.2.30.dev5+g4a7a32b"
+    "version": "0.0.0.dev0"
   },
   "paths": {
     "/health": {
@@ -5206,7 +5206,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "description": "File to upload (.pdf, .docx, .xlsx, .json, .txt, .csv, .md)"
           }
