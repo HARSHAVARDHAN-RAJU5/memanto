@@ -11,6 +11,7 @@ import re
 import tempfile
 from datetime import date, datetime, time, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
@@ -585,7 +586,7 @@ async def batch_remember(
             title = item.title or (
                 item.content[:47] + "..." if len(item.content) > 50 else item.content
             )
-            kwargs = {
+            kwargs: dict[str, Any] = {
                 "type": cast(MemoryType, item.type),
                 "title": title,
                 "content": item.content,

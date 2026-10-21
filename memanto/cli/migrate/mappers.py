@@ -596,7 +596,12 @@ def map_okf(export: dict[str, Any]) -> list[dict[str, Any]]:
 
         updated_at = _parse_dt(x_memanto.get("updated_at")) or migrated_at
         expired_at = _parse_dt(x_memanto.get("expired_at"))
-        expired_by = x_memanto.get("expired_by") if isinstance(x_memanto.get("expired_by"), str) and x_memanto.get("expired_by").strip() else None
+        exp_by = x_memanto.get("expired_by")
+        expired_by = (
+            exp_by
+            if isinstance(exp_by, str) and exp_by.strip()
+            else None
+        )
 
         status = x_memanto.get("status")
         if not isinstance(status, str) or not status.strip():

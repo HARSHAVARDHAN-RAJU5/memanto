@@ -2,6 +2,7 @@
 MEMANTO API Models
 """
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import (
@@ -21,8 +22,6 @@ from memanto.app.core import (
     MemorySource,
 )
 
-
-from datetime import datetime
 
 def _validate_non_blank_content(value: str) -> str:
     """Reject whitespace-only memory content before it reaches storage."""
