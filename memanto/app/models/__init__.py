@@ -44,8 +44,12 @@ class BatchRememberItem(BaseModel):
     )
     confidence: float = Field(0.8, ge=0.0, le=1.0, description="Confidence score (0-1)")
     tags: BoundedTags | None = Field(None, description="Tags for this memory")
-    status: StatusType | None = Field(None, description="Memory lifecycle status (e.g. active, expired)")
-    expired_at: datetime | None = Field(None, description="When this memory was expired")
+    status: StatusType | None = Field(
+        None, description="Memory lifecycle status (e.g. active, expired)"
+    )
+    expired_at: datetime | None = Field(
+        None, description="When this memory was expired"
+    )
     expired_by: str | None = Field(None, description="What/who expired this memory")
     source: MemorySource = Field(
         "agent",
@@ -80,7 +84,9 @@ class BatchRememberItem(BaseModel):
         """If a memory is marked expired, it must have an audit trail."""
         if self.status == "expired":
             if not self.expired_at or not self.expired_by:
-                raise ValueError("An expired memory must have both expired_at and expired_by")
+                raise ValueError(
+                    "An expired memory must have both expired_at and expired_by"
+                )
         return self
 
 

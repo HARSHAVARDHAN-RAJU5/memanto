@@ -1,15 +1,16 @@
-import sys
 from unittest.mock import Mock, call, patch
+
 import pytest
 
 from memanto.cli.commands import core
+
 
 @pytest.fixture
 def mock_ollama_setup():
     mock_pkg = Mock()
     mock_setup = Mock()
     mock_pkg.ollama_setup = mock_setup
-    
+
     with patch.dict(
         "sys.modules",
         {
@@ -50,7 +51,9 @@ def test_pull_ollama_model_falls_back_to_container_when_host_is_unreachable(
     container_pull.assert_called_once_with("nomic-embed-text")
 
 
-def test_onprem_setup_routes_ollama_models_through_shared_pull_helper(monkeypatch, mock_ollama_setup):
+def test_onprem_setup_routes_ollama_models_through_shared_pull_helper(
+    monkeypatch, mock_ollama_setup
+):
     state = {
         "embedding_provider": "ollama",
         "embedding_model": "nomic-embed-text",

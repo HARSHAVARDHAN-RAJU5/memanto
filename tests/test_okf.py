@@ -85,11 +85,10 @@ def test_navigation_named_memories_round_trip(tmp_path, split):
     imported = load_okf_bundle(base)["memories"]
     assert result["total_memories"] == len(memories)
     assert {
-        entry["x_memanto"]["id"]: (entry["title"], entry["body"])
-        for entry in imported
+        entry["x_memanto"]["id"]: (entry["title"], entry["body"]) for entry in imported
     } == {memory["id"]: (memory["title"], memory["content"]) for memory in memories}
-    assert (base / "memories" / "fact" / "index.md").read_text().startswith(
-        "# fact (5)\n"
+    assert (
+        (base / "memories" / "fact" / "index.md").read_text().startswith("# fact (5)\n")
     )
 
 
@@ -482,6 +481,7 @@ def test_okf_export_preserves_list_tags(tmp_path):
     fm = yaml.safe_load(fact_md.read_text(encoding="utf-8").split("---", 2)[1])
     assert set(fm["tags"]) == {"infra", "db"}
 
+
 def test_okf_round_trip_preserves_expired_lifecycle(tmp_path):
     """An expired memory's lifecycle stamp (expired_at + expired_by) must
     survive the OKF export -> import round-trip.
@@ -528,11 +528,13 @@ def test_okf_round_trip_preserves_expired_lifecycle(tmp_path):
 
     # Ensure the batch write path carries these forward correctly
     from memanto.cli.client.direct_client import DirectClient
+
     client = DirectClient(api_key="dummy")
     try:
         import unittest.mock
 
         from memanto.app.services.session_service import SessionService
+
         mock_svc = unittest.mock.Mock(spec=SessionService)
         # Mock get_active_session to return a dummy session
         mock_session = unittest.mock.Mock()
@@ -553,6 +555,7 @@ def test_okf_round_trip_preserves_expired_lifecycle(tmp_path):
         # If this fails because of test isolation issues, the assertions above are enough,
         # but try to test the direct client translation
         pass
+
 
 def test_okf_security_core_tests(tmp_path: Path):
     """Consolidated OKF security checks."""
