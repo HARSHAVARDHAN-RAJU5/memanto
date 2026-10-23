@@ -1912,9 +1912,12 @@ def get_ui_router():
 def mount_ui_static(app):
     """Mount the static files directory for serving the UI SPA."""
     if STATIC_DIR.exists():
-        # Serve index.html for the /ui root. No-store so the browser always
-        # picks up the latest UI without a hard refresh after upgrades.
+        # Serve index.html for /ui and every /ui/<page>; the SPA picks the page
+        # from the URL. Single-segment only, so /ui/static/* still reaches the
+        # mount below. No-store so the browser always picks up the latest UI
+        # without a hard refresh after upgrades.
         @app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+        @app.get("/ui/{page}", response_class=HTMLResponse, include_in_schema=False)
         async def serve_ui():
             index_path = STATIC_DIR / "index.html"
             if index_path.exists():

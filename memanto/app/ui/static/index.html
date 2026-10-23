@@ -320,6 +320,7 @@
             transition: all 0.2s ease;
             font-size: 13px;
             font-weight: 500;
+            text-decoration: none;
             border: 1px solid transparent;
             background: none;
             width: 100%;
@@ -3124,7 +3125,7 @@
                 </div>
             </div>
             <nav class="sidebar-nav">
-                <button class="nav-item active" data-page="dashboard">
+                <a class="nav-item active" href="/ui" data-page="dashboard">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7" rx="1" />
                         <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -3132,35 +3133,35 @@
                         <rect x="14" y="14" width="7" height="7" rx="1" />
                     </svg>
                     <span>Dashboard</span>
-                </button>
-                <button class="nav-item" data-page="agents">
+                </a>
+                <a class="nav-item" href="/ui/agents" data-page="agents">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
                         <circle cx="9" cy="7" r="4" />
                         <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
                     </svg>
                     <span>Agents</span>
-                </button>
-                <button class="nav-item" data-page="playground">
+                </a>
+                <a class="nav-item" href="/ui/playground" data-page="playground">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3" />
                     </svg>
                     <span>Playground</span>
-                </button>
-                <button class="nav-item" data-page="explorer">
+                </a>
+                <a class="nav-item" href="/ui/explorer" data-page="explorer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                     <span>Explorer</span>
-                </button>
-                <button class="nav-item" data-page="history">
+                </a>
+                <a class="nav-item" href="/ui/history" data-page="history">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10" />
                         <polyline points="12 6 12 12 16 14" />
                     </svg>
                     <span>History</span>
-                </button>
-                <button class="nav-item" data-page="conflicts">
+                </a>
+                <a class="nav-item" href="/ui/conflicts" data-page="conflicts">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                         <line x1="12" y1="9" x2="12" y2="13" />
@@ -3168,41 +3169,41 @@
                     </svg>
                     <span>Conflicts</span>
                     <span class="nav-badge" id="conflictBadge" style="display:none">0</span>
-                </button>
-                <button class="nav-item" data-page="policy">
+                </a>
+                <a class="nav-item" href="/ui/policy" data-page="policy">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="9" />
                         <polyline points="12 7 12 12 15 14" />
                     </svg>
                     <span>Expiry Policy</span>
-                </button>
-                <button class="nav-item" data-page="connections">
+                </a>
+                <a class="nav-item" href="/ui/connections" data-page="connections">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
                         <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
                     </svg>
                     <span>Connections</span>
-                </button>
-                <button class="nav-item" data-page="migrate">
+                </a>
+                <a class="nav-item" href="/ui/migrate" data-page="migrate">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 5l7 7-7 7M3 12h18" />
                     </svg>
                     <span>Migrate</span>
-                </button>
-                <button class="nav-item" data-page="config">
+                </a>
+                <a class="nav-item" href="/ui/config" data-page="config">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3" />
                         <path
                             d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
                     </svg>
                     <span>Config</span>
-                </button>
-                <button class="nav-item" data-page="analytics">
+                </a>
+                <a class="nav-item" href="/ui/analytics" data-page="analytics">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 20V10M12 20V4M6 20v-6" />
                     </svg>
                     <span>Analytics</span>
-                </button>
+                </a>
             </nav>
             <div class="sidebar-footer">
                 <div class="sidebar-status">
@@ -3725,28 +3726,57 @@
                 .replace(/'/g, '&#39;');
         }
 
-        // Navigation
-        document.querySelectorAll('.nav-item').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-                btn.classList.add('active');
-                document.getElementById('page-' + btn.dataset.page).classList.add('active');
-                // Re-fetch on every visit so a page never shows stale data
-                // after changes made elsewhere (CLI, another page, etc.).
-                const reload = PAGE_RELOADERS[btn.dataset.page];
-                if (reload) reload();
-                if (btn.dataset.page === 'history') S._historyLoaded = true;
-                if (btn.dataset.page === 'connections') startMeshPolling();
-                else stopMeshPolling();
+        // Navigation. Each page has its own URL (/ui for the dashboard,
+        // /ui/<page> otherwise); the server returns this same file for all of
+        // them, so refresh, deep links and back/forward all work.
+        const DEFAULT_PAGE = 'dashboard';
+        const BASE_TITLE = document.title;
+
+        function pageUrl(page) {
+            return page === DEFAULT_PAGE ? '/ui' : '/ui/' + page;
+        }
+
+        // Page named by the current URL, or null if it names no known page.
+        function pageFromUrl() {
+            const name = location.pathname.replace(/^\/ui\/?/, '').replace(/\/$/, '') || DEFAULT_PAGE;
+            return document.querySelector(`.nav-item[data-page="${CSS.escape(name)}"]`) ? name : null;
+        }
+
+        function showPage(page) {
+            const btn = document.querySelector(`.nav-item[data-page="${page}"]`);
+            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('page-' + page).classList.add('active');
+            document.title = page === DEFAULT_PAGE
+                ? BASE_TITLE
+                : `${btn.querySelector('span').textContent} · Memanto`;
+            // Re-fetch on every visit so a page never shows stale data
+            // after changes made elsewhere (CLI, another page, etc.).
+            const reload = PAGE_RELOADERS[page];
+            if (reload) reload();
+            if (page === 'history') S._historyLoaded = true;
+            if (page === 'connections') startMeshPolling();
+            else stopMeshPolling();
+        }
+
+        // Programmatically navigate to a page, adding a history entry.
+        function goToPage(page) {
+            if (!document.querySelector(`.nav-item[data-page="${page}"]`)) return;
+            if (location.pathname !== pageUrl(page)) history.pushState(null, '', pageUrl(page));
+            showPage(page);
+        }
+
+        document.querySelectorAll('.nav-item').forEach(link => {
+            link.addEventListener('click', e => {
+                // Let the browser handle ctrl/cmd/shift/middle-click (new tab/window).
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                goToPage(link.dataset.page);
             });
         });
 
-        // Programmatically navigate to a page (reuses the nav-item click handler)
-        function goToPage(page) {
-            const btn = document.querySelector(`.nav-item[data-page="${page}"]`);
-            if (btn) btn.click();
-        }
+        window.addEventListener('popstate', () => showPage(pageFromUrl() || DEFAULT_PAGE));
 
         // Per-page reload used by the nav-item handler above and by the
         // Refresh button in each page header.
@@ -3805,7 +3835,10 @@
             applyBackendVisibility();
             updateSidebarStatus();
             achvInit();
-            loadDashboard();
+            // Open the page named by the URL; normalize unknown paths to /ui.
+            const page = pageFromUrl();
+            if (!page) history.replaceState(null, '', pageUrl(DEFAULT_PAGE));
+            showPage(page || DEFAULT_PAGE);
             // Load conflict count for badge
             loadConflictBadge();
             // Check for template updates
