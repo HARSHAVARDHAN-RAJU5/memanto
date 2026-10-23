@@ -1238,13 +1238,14 @@ async def apply_template_update(_: None = Depends(_require_local)):
 async def connections_install(body: dict, _: None = Depends(_require_local)):
     """Install MEMANTO integration for one or more agents at a given location.
 
-    Body: {"agents": ["claude-code", ...], "project_dir": "/abs/path", "is_global": false}
+    Body: {"agents": ["claude-code", ...], "project_dir": "/abs/path", "is_global": false, "mcp_agent_id": "optional-id"}
     """
     agents = body.get("agents") or []
     if not isinstance(agents, list) or not agents:
         raise HTTPException(status_code=400, detail="`agents` must be a non-empty list")
     is_global = bool(body.get("is_global", False))
     project_dir = body.get("project_dir") or "."
+    mcp_agent_id = body.get("mcp_agent_id")
 
     unknown = [a for a in agents if a not in AGENT_REGISTRY]
     if unknown:
@@ -1263,9 +1264,20 @@ async def connections_install(body: dict, _: None = Depends(_require_local)):
                 status_code=400,
                 detail=f"project_dir does not exist or is not a directory: {project_dir}",
             )
+
         project_dir = str(path_obj.resolve())
 
-    results = [install_agent(name, project_dir, is_global) for name in agents]
+        # Prevent treating the user's home directory as a local project
+        if path_obj.resolve() == Path.home().resolve():
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot install as a local project in the home directory. Please use 'Install Globally' instead.",
+            )
+
+    results = [
+        install_agent(name, project_dir, is_global, mcp_agent_id=mcp_agent_id)
+        for name in agents
+    ]
     return {"results": results}
 
 

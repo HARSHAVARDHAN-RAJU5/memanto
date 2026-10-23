@@ -48,6 +48,7 @@ def install_agent(
     agent_name: str,
     project_dir: str = ".",
     is_global: bool = False,
+    mcp_agent_id: str | None = None,
 ) -> dict[str, Any]:
     """Install MEMANTO integration for a single agent.
 
@@ -63,12 +64,28 @@ def install_agent(
         }
 
     project_path = Path(project_dir).resolve()
+
+    # Prevent treating the user's home directory as a local project
+    if not is_global and project_path == Path.home().resolve():
+        return {
+            "agent": agent_name,
+            "steps": [],
+            "errors": [
+                "Cannot install as a local project in the home directory. Please use 'is_global=True' instead."
+            ],
+        }
+
     steps: list[str] = []
     errors: list[str] = []
 
+    # Determine which agent_id to set as the default for MCP
+    target_agent_id = mcp_agent_id if mcp_agent_id is not None else _active_agent_id()
+
     # Instruction file
     try:
-        instr_result = _install_instructions(agent, project_path, is_global)
+        instr_result = _install_instructions(
+            agent, project_path, is_global, target_agent_id
+        )
         if instr_result:
             steps.append(instr_result)
     except Exception as e:
@@ -79,7 +96,7 @@ def install_agent(
     if agent.mcp_client:
         try:
             mcp_result = install_mcp(
-                agent.mcp_client, project_path, is_global, _active_agent_id()
+                agent.mcp_client, project_path, is_global, target_agent_id
             )
             mcp_ready = mcp_result is None or not mcp_result.startswith("Skipped")
             if mcp_result:
@@ -155,6 +172,7 @@ def remove_agent(
         }
 
     project_path = Path(project_dir).resolve()
+
     steps: list[str] = []
     errors: list[str] = []
 
@@ -224,20 +242,22 @@ def remove_agent(
 
 
 def _install_instructions(
-    agent: AgentDef, project_path: Path, is_global: bool
+    agent: AgentDef,
+    project_path: Path,
+    is_global: bool,
+    target_agent_id: str | None = None,
 ) -> str | None:
     """Install MEMANTO instructions into the agent's instruction file."""
     if is_global and not agent.instruction_global_file:
         return None
     if not is_global and not agent.instruction_local_file:
         return None
-
     instr_path = agent.resolve_instruction_file(project_path, is_global)
     if not instr_path:
         return None
     _assert_local_write_scope(project_path, instr_path, is_global)
 
-    content = get_instruction_content(agent.name)
+    content = get_instruction_content(agent.name, target_agent_id)
 
     # For agents with directory-based instruction files (cline, roo, continue, augment)
     if agent.instruction_is_dir:
@@ -410,12 +430,16 @@ def _remove_instructions(
     if modified:
         # Clean up extra whitespace
         updated = re.sub(r"\n{3,}", "\n\n", existing).strip() + "\n"
-        if updated.strip():
-            instr_path.write_text(updated, encoding="utf-8")
-            return f"Removed MEMANTO sections from {instr_path.name}"
-        else:
+
+        # If the file only has applyTo frontmatter left (or is empty), delete it
+        if not updated.strip() or re.fullmatch(
+            r"---\r?\napplyTo:\s*[^\r\n]+\r?\n---", updated.strip()
+        ):
             instr_path.unlink()
             return f"Removed {instr_path.name} (was empty)"
+        else:
+            instr_path.write_text(updated, encoding="utf-8")
+            return f"Removed MEMANTO sections from {instr_path.name}"
 
     return None
 

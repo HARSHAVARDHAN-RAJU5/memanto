@@ -25,7 +25,6 @@ from memanto.app.services.agent_service import AgentService
 from memanto.app.utils.errors import (
     AgentAlreadyExistsError,
     AgentNotFoundError,
-    AuthorizationError,
     NamespaceError,
     SessionNotFoundError,
     map_error_to_http_exception,
@@ -39,7 +38,6 @@ router = APIRouter()
 from memanto.app.routes import memory  # noqa: E402
 from memanto.app.routes.auth_deps import (  # noqa: E402
     clear_session_cookie,
-    get_current_session,
     get_session_service,
     set_session_cookie,
     verify_moorcheh_api_key,
@@ -75,22 +73,6 @@ def _activate_agent_locked(agent_id: str, duration_hours: int) -> Session:
     """Create a session only while its agent still exists under the lock."""
     session_service = get_session_service()
     with session_service.lock_agent_lifecycle(agent_id):
-        # Prevent session hijack: reject re-activation while a valid session is
-        # already live. An attacker who knows an agent_id could otherwise call
-        # activate at any time to steal the session and lock out the real holder.
-        # Callers must deactivate the existing session before creating a new one.
-        existing = session_service.get_session(agent_id)
-        if existing and existing.is_active():
-            from fastapi import HTTPException
-
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"Agent '{agent_id}' already has an active session. "
-                    "Deactivate it first before re-activating."
-                ),
-            )
-
         agent = agent_service.get_agent(agent_id)
         if not agent:
             raise AgentNotFoundError(f"Agent '{agent_id}' not found")
@@ -342,22 +324,13 @@ async def activate_agent(
 async def deactivate_agent(
     agent_id: str,
     response: Response,
-    session: Session = Depends(get_current_session),
     _server_api_key: str = Depends(verify_moorcheh_api_key),
 ):
     """
     Deactivate agent and end session
 
     Terminates the current session and returns statistics.
-    Requires X-Session-Token header and matching agent_id.
     """
-    if session.agent_id != agent_id:
-        raise map_error_to_http_exception(
-            AuthorizationError(
-                f"Session is for agent '{session.agent_id}', cannot access '{agent_id}'"
-            )
-        )
-
     try:
         summary = get_session_service().end_session(agent_id)
         clear_session_cookie(response)

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import shutil
 import sys
@@ -55,11 +56,19 @@ def server_command() -> tuple[str, list[str]] | None:
     return None
 
 
-def _server_entry(command: str, args: list[str], agent_id: str) -> dict[str, Any]:
+def _server_entry(
+    command: str, args: list[str], agent_id: str, client: str = ""
+) -> dict[str, Any]:
+    env = {"MEMANTO_DEFAULT_AGENT_ID": agent_id, MANAGED_ENV: MANAGED_VALUE}
+    if client:
+        # Override the default source in the MCP server with the CLI client name
+        # so cross-namespace setups (e.g. Cursor writing to Copilot namespace)
+        # attribute the write to the actual client making the call.
+        env["MEMANTO_DEFAULT_SOURCE"] = client
     return {
         "command": command,
         "args": args,
-        "env": {"MEMANTO_DEFAULT_AGENT_ID": agent_id, MANAGED_ENV: MANAGED_VALUE},
+        "env": env,
     }
 
 
@@ -74,7 +83,7 @@ def _is_managed(entry: Any) -> bool:
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    data = json.loads(path.read_text(encoding="utf-8") or "{}")
+    data = json.loads(path.read_text(encoding="utf-8-sig") or "{}")
     if not isinstance(data, dict):
         raise ValueError(f"{path} is not a JSON object")
     return data
@@ -95,7 +104,24 @@ def _check_local(project_path: Path, target: Path, is_global: bool) -> None:
     _assert_local_write_scope(project_path, target, is_global)
 
 
-# JSON clients (Claude Code .mcp.json / ~/.claude.json, Cursor mcp.json)
+def _vscode_user_mcp_path() -> Path:
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA", os.path.expanduser("~\\AppData\\Roaming"))
+        return Path(base) / "Code" / "User" / "mcp.json"
+    elif sys.platform == "darwin":
+        return (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / "Code"
+            / "User"
+            / "mcp.json"
+        )
+    else:
+        return Path.home() / ".config" / "Code" / "User" / "mcp.json"
+
+
+# JSON clients (Claude Code .mcp.json / ~/.claude.json, Cursor mcp.json, VS Code mcp.json)
 
 
 def _install_json_server(
@@ -235,11 +261,13 @@ def install_mcp(
         )
     if not agent_id:
         return (
-            "Skipped MCP server: no active memanto agent "
-            "(memanto agent activate <id>, then run connect again)"
+            "Skipped MCP server: no active memanto agent provided "
+            "(pass an agent ID to connect, or activate one first)"
         )
     command, args = launch
-    entry = _server_entry(command, args, agent_id)
+    # Pass the CLI client identifier so the MCP server knows who configured it
+    # and can use it as the default source when writing memories.
+    entry = _server_entry(command, args, agent_id, client)
 
     if client == "claude":
         if is_global:
@@ -260,6 +288,15 @@ def install_mcp(
         target = base / ".cursor" / "mcp.json"
         _check_local(project_path, target, is_global)
         return _install_json_server(target, "mcpServers", entry)
+    if client == "github-copilot":
+        target = (
+            _vscode_user_mcp_path()
+            if is_global
+            else project_path / ".vscode" / "mcp.json"
+        )
+        _check_local(project_path, target, is_global)
+        entry["type"] = "stdio"
+        return _install_json_server(target, "servers", entry)
     if client == "codex":
         # Codex reads MCP servers only from the user config, for every project.
         return _install_codex(command, args, agent_id)
@@ -285,6 +322,14 @@ def remove_mcp(client: str, project_path: Path, is_global: bool) -> str | None:
         target = base / ".cursor" / "mcp.json"
         _check_local(project_path, target, is_global)
         return _remove_json_server(target, "mcpServers")
+    if client == "github-copilot":
+        target = (
+            _vscode_user_mcp_path()
+            if is_global
+            else project_path / ".vscode" / "mcp.json"
+        )
+        _check_local(project_path, target, is_global)
+        return _remove_json_server(target, "servers")
     if client == "codex":
         # The Codex entry is shared by every project, so only a global remove
         # takes it out; removing one project must not break the others.
