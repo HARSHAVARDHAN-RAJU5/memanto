@@ -62,12 +62,12 @@ After the server shows as connected, the client should list 7 tools:
 `remember`, `batch_remember`, `recall`, `recall_recent`, `recall_as_of`,
 `recall_changed_since`, and `answer`.
 
-Run a quick check:
+Run a quick read-only check: call `recall_recent` with `limit` 1. A result
+with `status` `ok` means the server is connected and the API key works. On a
+new agent the memory list is empty, which is expected.
 
-1. Call `remember` with a harmless test fact, for example
-   `"Memanto install check"` with type `fact`.
-2. Call `recall` with the query `"install check"` and confirm the fact comes
-   back.
+Don't save a test memory to check the install. Memories are permanent, so a
+test entry would show up in the user's later recalls.
 
 ## Troubleshooting
 
