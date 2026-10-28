@@ -211,6 +211,46 @@ def test_okf_invalid_provenance_falls_back_to_imported():
     assert map_okf(export)[0]["provenance"] == "imported"
 
 
+def test_okf_expired_without_stamp_is_backfilled():
+    """An older export with ``status: expired`` but no audit stamp must still
+    pass batch validation instead of failing the whole import."""
+    from memanto.app.models import BatchRememberItem
+
+    export = {
+        "memories": [
+            {
+                "title": "Old expired memory",
+                "body": "Exported before expired_at/expired_by existed.",
+                "x_memanto": {
+                    "status": "expired",
+                    "updated_at": "2026-06-01T12:00:00Z",
+                },
+            }
+        ]
+    }
+
+    row = map_okf(export)[0]
+    assert row["status"] == "expired"
+    assert row["expired_at"].isoformat() == "2026-06-01T12:00:00+00:00"
+    assert row["expired_by"] == "okf-import"
+    BatchRememberItem(**{k: row[k] for k in BatchRememberItem.model_fields if k in row})
+
+
+def test_okf_unknown_status_falls_back_to_active():
+    """Foreign or malformed status must not reach batch validation."""
+    export = {
+        "memories": [
+            {
+                "title": "Foreign memory",
+                "body": "Imported from another OKF producer.",
+                "x_memanto": {"status": "archived"},
+            }
+        ]
+    }
+
+    assert map_okf(export)[0]["status"] == "active"
+
+
 def test_foreign_okf_bundle_is_lossless(tmp_path):
     """
     A foreign OKF doc: free-form ``type`` -> auto-classify (None), and the

@@ -218,9 +218,7 @@ class SdkClient:
                     self.session_token = renewed.session_token
                 else:
                     try:
-                        self._cached_session = session_service.validate_session(
-                            self.session_token
-                        )
+                        session_service.validate_session(self.session_token)
                     except Exception:
                         self._cached_session = None
                         raise
