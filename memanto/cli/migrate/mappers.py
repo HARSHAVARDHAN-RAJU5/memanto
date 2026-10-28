@@ -36,9 +36,13 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, get_args
 
-from memanto.app.constants import VALID_MEMORY_TYPES, VALID_PROVENANCE_TYPES
+from memanto.app.constants import (
+    VALID_MEMORY_TYPES,
+    VALID_PROVENANCE_TYPES,
+    StatusType,
+)
 from memanto.app.core import INJECTION_PATTERNS, TAG_PATTERN
 
 # Mem0 ships category labels per memory. Map the common ones to Memanto's
@@ -599,9 +603,15 @@ def map_okf(export: dict[str, Any]) -> list[dict[str, Any]]:
         exp_by = x_memanto.get("expired_by")
         expired_by = exp_by if isinstance(exp_by, str) and exp_by.strip() else None
 
-        status = x_memanto.get("status")
-        if not isinstance(status, str) or not status.strip():
+        raw_status = x_memanto.get("status")
+        status = raw_status.strip().lower() if isinstance(raw_status, str) else ""
+        if status not in get_args(StatusType):
             status = "active"
+        if status == "expired":
+            # Older exports carry the status without its audit stamp, which
+            # batch validation rejects; backfill it rather than fail the batch.
+            expired_at = expired_at or updated_at
+            expired_by = expired_by or "okf-import"
 
         original_title = None
         if title and len(title) > _MAX_TITLE_CHARS:
