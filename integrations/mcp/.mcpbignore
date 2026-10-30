@@ -8,8 +8,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-.env
-.env.example
+.env*
 Dockerfile
 .dockerignore
 llms-install.md
